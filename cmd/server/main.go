@@ -34,7 +34,7 @@ func main() {
 		log.Fatalf("minio: %v", err)
 	}
 
-	server := httpserver.New(db, minioClient)
+	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey)
 	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
 	}
