@@ -1,9 +1,11 @@
-package server
+package httpserver
 
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
+
+	"oblak/internal/server/handler"
 )
 
 type Server struct {
@@ -18,7 +20,8 @@ func New(db *pgxpool.Pool, filestore *minio.Client) *Server {
 		db:        db,
 		filestore: filestore,
 	}
-	s.registerRoutes()
+	h := handler.New()
+	s.registerRoutes(h, nil)
 	return s
 }
 
