@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"log"
+	"oblak/internal/server/httpserver"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
-	"oblak/internal/config"
-	"oblak/internal/database"
-	"oblak/internal/filestore"
-	"oblak/internal/server"
+	"oblak/internal/server/config"
+	"oblak/internal/server/database"
+	"oblak/internal/server/filestore"
 )
 
 func main() {
@@ -34,8 +34,8 @@ func main() {
 		log.Fatalf("minio: %v", err)
 	}
 
-	srv := server.New(db, minioClient)
-	if err := srv.Run(":" + cfg.Port); err != nil {
+	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey)
+	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
 	}
 }
