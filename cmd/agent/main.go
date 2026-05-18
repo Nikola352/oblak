@@ -4,23 +4,17 @@ package main
 
 import (
 	"oblak/internal/agent"
-	"os"
-	"os/exec"
 )
 
 func main() {
 	agent.SetPath()
 	agent.MountSystemDirs()
 
-	agent.WriteLog("Starting Python execution...")
+	agent.WriteLog("Listening for commands...")
 
-	code := "print('hello world')"
-	cmd := exec.Command("python3", "-c", code)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		agent.WriteErr("python execution failed", err)
+	err := agent.ListenForCommands()
+	if err != nil {
+		agent.WriteErr("", err)
 	}
 
 	agent.WriteLog("Execution complete.")
