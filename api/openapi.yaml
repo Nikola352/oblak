@@ -14,12 +14,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+  /upload-lambda:
+    post:
+      operationId: UploadLambda
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - function
+              properties:
+                function:
+                  type: string
+                  format: binary
+                  description: The function archive file (tar.gz, tar.xz, or zip)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
 
 components:
   schemas:
     HealthResponse:
       type: object
       required: [status]
+      properties:
+        status:
+          type: string
+    UploadResponse:
+      type: object
+      required: [ status ]
       properties:
         status:
           type: string

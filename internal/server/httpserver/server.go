@@ -22,7 +22,7 @@ func New(db *pgxpool.Pool, filestore *minio.Client, kek string) *Server {
 		db:        db,
 		filestore: filestore,
 	}
-	h := handler.New()
+	h := handler.New(db, filestore)
 	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
 	s.registerRoutes(h, auth)
 	return s

@@ -34,6 +34,12 @@ func main() {
 		log.Fatalf("minio: %v", err)
 	}
 
+	bucketRegistry := filestore.NewBucketRegistry()
+	bucketInitializer := filestore.NewBucketInitializer(minioClient, bucketRegistry)
+
+	if err := bucketInitializer.InitializeBuckets(ctx); err != nil {
+		log.Fatalf("Failed to initialize buckets: %v", err)
+	}
 	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey)
 	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
