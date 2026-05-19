@@ -46,19 +46,34 @@ func RequireAuth(store keyStore) api.StrictMiddlewareFunc {
 				return nil, err
 			}
 
-			body, err := io.ReadAll(c.Request.Body)
-			if err != nil {
-				return nil, err
-			}
-			c.Request.Body = io.NopCloser(bytes.NewReader(body))
+			contentType := c.GetHeader("Content-Type")
+			isMultipart := strings.HasPrefix(contentType, "multipart/")
+			if isMultipart {
+				// skip body encryption if multipart (reading again issues)
+				expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, []byte{}, dateHeader, authKey.SecretKey)
+				if err != nil {
+					return nil, err
+				}
 
-			expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, body, dateHeader, authKey.SecretKey)
-			if err != nil {
-				return nil, err
-			}
+				if !hmac.Equal([]byte(expected), []byte(signature)) {
+					return nil, apperr.ErrUnauthorized
+				}
 
-			if !hmac.Equal([]byte(expected), []byte(signature)) {
-				return nil, apperr.ErrUnauthorized
+			} else {
+				body, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					return nil, err
+				}
+				c.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+				expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, body, dateHeader, authKey.SecretKey)
+				if err != nil {
+					return nil, err
+				}
+
+				if !hmac.Equal([]byte(expected), []byte(signature)) {
+					return nil, apperr.ErrUnauthorized
+				}
 			}
 
 			c.Set("user_id", authKey.UserId)

@@ -34,3 +34,5 @@ go.work.sum
 
 # firecracker assets
 deployment/firecracker/
+
+code/

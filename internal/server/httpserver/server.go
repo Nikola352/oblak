@@ -1,6 +1,9 @@
 package httpserver
 
 import (
+	"oblak/internal/server/events"
+	"oblak/internal/server/function"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
@@ -16,13 +19,14 @@ type Server struct {
 	filestore *minio.Client
 }
 
-func New(db *pgxpool.Pool, filestore *minio.Client, kek string) *Server {
+func New(db *pgxpool.Pool, filestore *minio.Client, kek string, quarantineBus *events.Bus[events.QuarantineEvent],
+	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store) *Server {
 	s := &Server{
 		router:    gin.Default(),
 		db:        db,
 		filestore: filestore,
 	}
-	h := handler.New()
+	h := handler.New(functionStore, filestore, quarantineBus, extractionBus)
 	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
 	s.registerRoutes(h, auth)
 	return s
