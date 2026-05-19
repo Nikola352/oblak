@@ -31,7 +31,7 @@ func NewBucketRegistry() *BucketRegistry {
 			ExtractedBucket: {
 				Name:          "oblak-extracted",
 				IsPublic:      false,
-				RetentionDays: nil,
+				RetentionDays: ptr(1),
 			},
 			FunctionsBucket: {
 				Name:          "oblak-functions",
