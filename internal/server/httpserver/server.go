@@ -1,6 +1,8 @@
 package httpserver
 
 import (
+	"oblak/internal/server/function"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/minio/minio-go/v7"
@@ -22,7 +24,7 @@ func New(db *pgxpool.Pool, filestore *minio.Client, kek string) *Server {
 		db:        db,
 		filestore: filestore,
 	}
-	h := handler.New(db, filestore)
+	h := handler.New(function.NewStore(db), filestore)
 	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
 	s.registerRoutes(h, auth)
 	return s
