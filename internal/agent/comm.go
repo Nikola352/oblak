@@ -32,11 +32,13 @@ func ListenForCommands() error {
 	}
 
 	switch msg.Type {
-	case "exec":
+	case agentproto.TypeExec:
 		WriteLog("Starting execution...")
 		if err = ExecuteCode(conn); err != nil {
 			WriteErr("execution failed", err)
 		}
+	case agentproto.TypeBuild:
+		//...
 	}
 
 	// Wait for host to close the connection before shutting down.
