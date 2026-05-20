@@ -46,6 +46,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
 volumes:
   postgres-data:
   minio-data:
