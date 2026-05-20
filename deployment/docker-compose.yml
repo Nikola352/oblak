@@ -49,6 +49,12 @@ services:
   clamav:
     image: clamav/clamav:stable
     restart: unless-stopped
+    ports:
+      - "3310:3310" # Expose for your Go app
+    environment:
+        # These environment variables tell the official ClamAV image to enable TCP
+        - TCPSocket=3310
+        - TCPAddr=0.0.0.0
 
   ollama:
     image: ollama/ollama:latest

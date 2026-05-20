@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/ThreeDotsLabs/watermill v1.5.2
 	github.com/ThreeDotsLabs/watermill-amqp/v3 v3.1.0
+	github.com/bchisham/go-clamd v1.0.8
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
