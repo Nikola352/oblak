@@ -29,7 +29,24 @@ services:
     volumes:
       - minio-data:/data
     command: server /data --console-address ":9001"
-
+  mq:
+    image: rabbitmq:4.0-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"   # RabbitMQ protocol port
+      - "15672:15672" # Management UI port
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 volumes:
   postgres-data:
   minio-data:
+  rabbitmq-data:
