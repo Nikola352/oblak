@@ -58,3 +58,4 @@ volumes:
   postgres-data:
   minio-data:
   rabbitmq-data:
+  ollama_data:
