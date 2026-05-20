@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -28,6 +29,7 @@ type MicroVM struct {
 	controlPath string
 	logFile     *os.File
 	machine     *firecracker.Machine
+	drives      []DriveMount
 }
 
 func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
@@ -101,6 +103,7 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 		controlPath: controlPath,
 		logFile:     logFile,
 		machine:     machine,
+		drives:      drives,
 	}, nil
 }
 
@@ -146,4 +149,16 @@ func (vm *MicroVM) Stop() error {
 	_ = os.Remove(vm.vsockPath)
 	_ = os.Remove(vm.controlPath)
 	return err
+}
+
+func (vm *MicroVM) CleanUpDrives() {
+	for _, drive := range vm.drives {
+		if drive.Cleanup == nil {
+			continue
+		}
+		err := drive.Cleanup()
+		if err != nil {
+			log.Printf("error on drive cleanup: %v\n", err)
+		}
+	}
 }
