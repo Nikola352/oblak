@@ -18,8 +18,12 @@ func StartListener(ctx context.Context) error {
 	exchangeName := "analyzer"
 	topicName := "analyzer"
 
+	endpoint := "localhost:9000"
+	accessKey := "minioadmin"
+	secretKey := "minioadmin"
 	cfg := consumerConfig(amqpURI, exchangeName, queueName)
 
+	fileloader := NewFileLoader(endpoint, accessKey, secretKey, "quarantine")
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {
 		return fmt.Errorf("failed to create subscriber: %w", err)
@@ -45,7 +49,7 @@ func StartListener(ctx context.Context) error {
 				// Add a log here to see if the loop actually receives anything
 				log.Printf("Received message: %s", msg.UUID)
 				msg.Ack()
-				processMessage(ctx, msg)
+				processMessage(ctx, msg, fileloader)
 			case <-ctx.Done():
 				log.Printf("Shutting down")
 				sub.Close()
@@ -55,8 +59,12 @@ func StartListener(ctx context.Context) error {
 	}()
 	return nil
 }
-func processMessage(ctx context.Context, msg *message.Message) error {
+func processMessage(ctx context.Context, msg *message.Message, fl *FileLoader) error {
 	log.Println("Stiglo!")
+	err := fl.download("check_future_dates.py")
+	if err != nil {
+		return err
+	}
 	return nil
 }
 func consumerConfig(amqpURI, exchangeName, queueName string) amqp.Config {
