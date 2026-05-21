@@ -27,8 +27,10 @@ func StartListener(ctx context.Context) error {
 	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
 	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep")
 	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
-	var gvisorBox dast.DetonationBox = dast.NewGVisorBox()
-
+	gvisorBox, err := dast.NewGVisorBox()
+	if err != nil {
+		panic(err)
+	}
 	orchestrator := NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
@@ -68,7 +70,7 @@ func StartListener(ctx context.Context) error {
 func processMessage(ctx context.Context, msg *message.Message, ao *AnalysisOrchestrator) error {
 	log.Println("Stiglo!")
 	fileName := string(msg.Payload)
-	fileName = "clean.py"
+	fileName = "prober.py"
 	err := ao.AnalyzeFile(ctx, fileName)
 	if err != nil {
 		return err

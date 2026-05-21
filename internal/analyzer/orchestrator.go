@@ -97,9 +97,12 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 		}
 	}
 
-	detonationResult := ao.detonationBox.Detonate(ctx)
-
-	return detonationResult
+	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
+	log.Println(detonationResult)
+	if err != nil {
+		return err
+	}
+	return err
 }
 
 func (ao *AnalysisOrchestrator) askLlm(finding sast.SemgrepResult) (llm.Verdict, error) {
