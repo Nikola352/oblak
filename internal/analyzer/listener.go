@@ -59,7 +59,7 @@ func StartListener(ctx context.Context) error {
 func processMessage(ctx context.Context, msg *message.Message, ao *AnalysisOrchestrator) error {
 	log.Println("Stiglo!")
 	fileName := string(msg.Payload)
-	fileName = "check_future_dates.py"
+	fileName = "vulnerable.py"
 	err := ao.AnalyzeFile(ctx, fileName)
 	if err != nil {
 		return err

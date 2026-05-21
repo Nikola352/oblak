@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"log"
+	"oblak/internal/analyzer/sast"
 	"os"
 )
 
 type AnalysisOrchestrator struct {
-	antivirus  *Antivirus
-	fileLoader *FileLoader
+	antivirus    *Antivirus
+	fileLoader   *FileLoader
+	sastAnalyzer *sast.SemgrepAnalyzer
 }
 
 func NewOrchestrator() *AnalysisOrchestrator {
@@ -19,8 +21,9 @@ func NewOrchestrator() *AnalysisOrchestrator {
 	fileloader := NewFileLoader(endpoint, accessKey, secretKey, "quarantine")
 
 	return &AnalysisOrchestrator{
-		antivirus:  NewAntivirus("tcp://localhost:3310"),
-		fileLoader: fileloader,
+		antivirus:    NewAntivirus("tcp://localhost:3310"),
+		fileLoader:   fileloader,
+		sastAnalyzer: sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep"),
 	}
 }
 func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) error {
@@ -67,7 +70,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 		return errors.New("[CLAMAV] file is UNSAFE. REJECTING FILE")
 	}
 
-	semReport, err := RunSemgrep(localPath)
+	semReport, err := ao.sastAnalyzer.Run(localPath)
 	if err != nil {
 		log.Fatalf("[SEMGREP] Error running semgrep: %v", err)
 	}
