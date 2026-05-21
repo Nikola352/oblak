@@ -2,6 +2,7 @@ package analyzer
 
 import (
 	"context"
+	"fmt"
 	"log"
 
 	"github.com/minio/minio-go/v7"
@@ -33,10 +34,13 @@ func NewFileLoader(endpoint, accessKey, secretKey, bucketName string) *FileLoade
 	}
 }
 
-func (fl *FileLoader) download(fileName string) error {
-	err := fl.client.FGetObject(context.Background(), fl.bucketName, fileName, "/tmp/quarantine/"+fileName, minio.GetObjectOptions{})
+func (fl *FileLoader) Download(ctx context.Context, fileName string) (string, error) {
+	localPath := "/tmp/quarantine/" + fileName
+
+	err := fl.client.FGetObject(ctx, fl.bucketName, fileName, localPath, minio.GetObjectOptions{})
 	if err != nil {
-		log.Fatalln(err)
+		return "", fmt.Errorf("minio download failed: %w", err)
 	}
-	return nil
+
+	return localPath, nil
 }
