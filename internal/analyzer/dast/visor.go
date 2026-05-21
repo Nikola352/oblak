@@ -14,8 +14,6 @@ import (
 
 const runscLogDir = "/tmp/runsc-logs"
 
-// ---- Types ----
-
 type GVisorBox struct {
 	cli *client.Client
 }
