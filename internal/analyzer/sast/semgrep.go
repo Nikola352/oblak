@@ -3,6 +3,7 @@ package sast
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os/exec"
 )
 
@@ -18,7 +19,8 @@ func NewSemgrepAnalyzer(binaryPath string) *SemgrepAnalyzer {
 
 func (a SemgrepAnalyzer) Run(targetPath string) (*SemgrepOutput, error) {
 	//
-	cmd := exec.Command(a.binaryPath, "scan", "--json", "--config", "auto", "--quiet", targetPath)
+	log.Println("[SEMGREP] Beginning static analysis")
+	cmd := exec.Command(a.binaryPath, "scan", "--json", "--config", "r/python", "--quiet", targetPath)
 	output, err := cmd.Output()
 	if err != nil {
 		// Semgrep returns exit code 1 if findings are found; we check output length instead

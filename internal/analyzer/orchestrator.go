@@ -7,11 +7,13 @@ import (
 	"oblak/internal/analyzer/av"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
+	"oblak/internal/analyzer/sanitizer"
 	"oblak/internal/analyzer/sast"
 	"os"
 )
 
 type AnalysisOrchestrator struct {
+	sanitizer     sanitizer.CodeSanitizer
 	antivirus     av.Antivirus
 	fileLoader    *FileLoader
 	sastAnalyzer  sast.StaticAnalyzer
@@ -26,14 +28,15 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 	fileloader := NewFileLoader(endpoint, accessKey, secretKey, "quarantine")
 
 	return &AnalysisOrchestrator{
+		sanitizer:     sanitizer.CodeSanitizer{},
 		antivirus:     av,
 		detonationBox: box,
-		//antivirus:    av.NewClamAV("tcp://localhost:3310"),
-		fileLoader:   fileloader,
-		sastAnalyzer: analyzer,
-		llmJudge:     llm,
+		fileLoader:    fileloader,
+		sastAnalyzer:  analyzer,
+		llmJudge:      llm,
 	}
 }
+
 func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) error {
 	// 1. Get the filename from the RabbitMQ message payload
 	log.Printf("Processing file from queue: %s", fileName)
@@ -69,34 +72,45 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	// 4. Scan it
 	isClean, err := ao.antivirus.ScanStream(ctx, file)
 	if err != nil {
-		log.Printf("[CLAMAV] Antivirus scan failed to execute: %v", err)
+		log.Printf("[ANTIVIRUS] Antivirus scan failed to execute: %v", err)
 		return err
 	}
 
 	// 5. Act on the results
 	if !isClean {
-		return errors.New("[CLAMAV] file is UNSAFE. REJECTING FILE")
+		return errors.New("[ANTIVIRUS] file is UNSAFE. REJECTING FILE")
 	}
 
 	semReport, err := ao.sastAnalyzer.Run(localPath)
 	if err != nil {
-		log.Fatalf("[SEMGREP] Error running semgrep: %v", err)
+		log.Fatalf("[SAST] Error running semgrep: %v", err)
 	}
-	if len(semReport.Results) == 0 {
-		//TODO PASS TO DETONATION BOX
-		return nil
-	}
-	for _, finding := range semReport.Results {
-		msg := finding.Extra.Message
-		code := finding.Extra.Lines
-
-		verdict, err := ao.llmJudge.Ask(msg, code)
-		if err != nil {
-			log.Printf("Judge failed for finding %s: %v", finding.CheckID, err)
-			continue // Or return err if you want to fail the whole message
+	if len(semReport.Results) != 0 {
+		for _, finding := range semReport.Results {
+			verdict, err := ao.askLlm(finding)
+			if err != nil {
+				continue
+			}
+			if verdict == llm.MALICIOUS {
+				return errors.New("LLM Agent flagged the code as malicious, stopping investigation")
+			}
 		}
-
-		log.Printf("[QWEN VERDICT] %s: %s", finding.CheckID, verdict)
 	}
-	return nil
+
+	detonationResult := ao.detonationBox.Detonate(ctx)
+
+	return detonationResult
+}
+
+func (ao *AnalysisOrchestrator) askLlm(finding sast.SemgrepResult) (llm.Verdict, error) {
+	msg := finding.Extra.Message
+	cleanCode := ao.sanitizer.SanitizeCode(finding.Extra.Lines)
+	verdict, err := ao.llmJudge.Ask(msg, cleanCode)
+	if err != nil {
+		log.Printf("Judge failed for finding %s: %v", finding.CheckID, err)
+		return llm.FAILURE, err
+	}
+
+	log.Printf("[QWEN VERDICT] %s: %s", finding.CheckID, verdict)
+	return verdict, nil
 }
