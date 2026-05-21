@@ -4,6 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/dast"
+	"oblak/internal/analyzer/llm"
+	"oblak/internal/analyzer/sast"
 
 	"github.com/ThreeDotsLabs/watermill"
 	_ "github.com/ThreeDotsLabs/watermill"
@@ -20,7 +24,12 @@ func StartListener(ctx context.Context) error {
 
 	cfg := consumerConfig(amqpURI, exchangeName, queueName)
 
-	orchestrator := NewOrchestrator()
+	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep")
+	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
+	var gvisorBox dast.DetonationBox = dast.NewGVisorBox()
+
+	orchestrator := NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {

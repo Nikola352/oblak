@@ -50,6 +50,7 @@ services:
       timeout: 5s
       retries: 5
   clamav:
+
     image: clamav/clamav:stable
     restart: unless-stopped
     ports:
@@ -60,9 +61,12 @@ services:
         - TCPAddr=0.0.0.0
 
   ollama:
+    container_name: ollama
     image: ollama/ollama:latest
     volumes:
       - ollama_data:/root/.ollama
+    ports:
+          - "11434:11434"
 volumes:
   postgres-data:
   minio-data:

@@ -1,4 +1,4 @@
-package analyzer
+package av
 
 import (
 	"context"
@@ -9,20 +9,20 @@ import (
 	"github.com/bchisham/go-clamd"
 )
 
-type Antivirus struct {
+type ClamAV struct {
 	client *clamd.Clamd
 }
 
-func NewAntivirus(clamPath string) *Antivirus {
-	return &Antivirus{
+func NewClamAV(clamPath string) *ClamAV {
+	return &ClamAV{
 		client: clamd.NewClamd(clamPath),
 	}
 }
-func (a *Antivirus) Ping() error {
+func (a *ClamAV) Ping() error {
 	return a.client.Ping()
 }
 
-func (a *Antivirus) ScanStream(ctx context.Context, reader io.Reader) (bool, error) {
+func (a *ClamAV) ScanStream(ctx context.Context, reader io.Reader) (bool, error) {
 	results, err := a.client.ScanStreamContext(ctx, reader)
 	if err != nil {
 		return false, fmt.Errorf("[CLAMAV] failed to initiate scan: %w", err)

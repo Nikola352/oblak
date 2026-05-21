@@ -4,26 +4,34 @@ import (
 	"context"
 	"errors"
 	"log"
+	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/dast"
+	"oblak/internal/analyzer/llm"
 	"oblak/internal/analyzer/sast"
 	"os"
 )
 
 type AnalysisOrchestrator struct {
-	antivirus    *Antivirus
-	fileLoader   *FileLoader
-	sastAnalyzer *sast.SemgrepAnalyzer
+	antivirus     av.Antivirus
+	fileLoader    *FileLoader
+	sastAnalyzer  sast.StaticAnalyzer
+	llmJudge      llm.JudgeLLM
+	detonationBox dast.DetonationBox
 }
 
-func NewOrchestrator() *AnalysisOrchestrator {
+func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox) *AnalysisOrchestrator {
 	endpoint := "localhost:9000"
 	accessKey := "minioadmin"
 	secretKey := "minioadmin"
 	fileloader := NewFileLoader(endpoint, accessKey, secretKey, "quarantine")
 
 	return &AnalysisOrchestrator{
-		antivirus:    NewAntivirus("tcp://localhost:3310"),
+		antivirus:     av,
+		detonationBox: box,
+		//antivirus:    av.NewClamAV("tcp://localhost:3310"),
 		fileLoader:   fileloader,
-		sastAnalyzer: sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep"),
+		sastAnalyzer: analyzer,
+		llmJudge:     llm,
 	}
 }
 func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) error {
@@ -74,8 +82,21 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	if err != nil {
 		log.Fatalf("[SEMGREP] Error running semgrep: %v", err)
 	}
+	if len(semReport.Results) == 0 {
+		//TODO PASS TO DETONATION BOX
+		return nil
+	}
 	for _, finding := range semReport.Results {
-		log.Println("dsadadas", finding)
+		msg := finding.Extra.Message
+		code := finding.Extra.Lines
+
+		verdict, err := ao.llmJudge.Ask(msg, code)
+		if err != nil {
+			log.Printf("Judge failed for finding %s: %v", finding.CheckID, err)
+			continue // Or return err if you want to fail the whole message
+		}
+
+		log.Printf("[QWEN VERDICT] %s: %s", finding.CheckID, verdict)
 	}
 	return nil
 }
