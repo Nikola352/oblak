@@ -111,10 +111,10 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	return err
 }
 
-func (ao *AnalysisOrchestrator) askLlm(finding sast.SemgrepResult) (llm.Verdict, error) {
+func (ao *AnalysisOrchestrator) askLlm(finding sast.SemgrepResult) (llm.SastVerdict, error) {
 	msg := finding.Extra.Message
 	cleanCode := ao.sanitizer.SanitizeCode(finding.Extra.Lines)
-	verdict, err := ao.llmJudge.Ask(msg, cleanCode)
+	verdict, err := ao.llmJudge.AskForSAST(msg, cleanCode)
 	if err != nil {
 		log.Printf("Judge failed for finding %s: %v", finding.CheckID, err)
 		return llm.FAILURE, err

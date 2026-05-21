@@ -1,5 +1,5 @@
 package llm
 
 type JudgeLLM interface {
-	Ask(sastMessage string, codeContext string) (Verdict, error)
+	AskForSAST(sastMessage string, codeContext string) (SastVerdict, error)
 }

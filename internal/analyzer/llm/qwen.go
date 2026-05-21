@@ -17,7 +17,7 @@ func NewQwenJudge(bUrl string) *QwenJudge {
 	return &QwenJudge{baseUrl: bUrl}
 }
 
-func (j *QwenJudge) Ask(sastMessage string, codeContext string) (Verdict, error) {
+func (j *QwenJudge) AskForSAST(sastMessage string, codeContext string) (SastVerdict, error) {
 	url := j.baseUrl + "/api/generate"
 	if j.baseUrl == "" {
 		url = "http://localhost:11434/api/generate"
