@@ -4,8 +4,8 @@
 
 set -euo pipefail
 
-ROOTFS_SRC="./deployment/firecracker/ubuntu-24.04.squashfs"
-ROOTFS_DEST="./deployment/firecracker/rootfs.squashfs"
+ROOTFS_SRC="./firecracker/ubuntu-24.04.squashfs"
+ROOTFS_DEST="./firecracker/rootfs.squashfs"
 AGENT_BIN="./bin/agent"
 
 mkdir -p "$(dirname "$AGENT_BIN")"
