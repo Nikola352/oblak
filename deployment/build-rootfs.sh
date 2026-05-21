@@ -4,8 +4,11 @@
 
 set -euo pipefail
 
-ROOTFS_SRC="./firecracker/ubuntu-24.04.squashfs"
-ROOTFS_DEST="./firecracker/rootfs.squashfs"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+ROOTFS_SRC="./deployment/firecracker/ubuntu-24.04.squashfs"
+ROOTFS_DEST="./deployment/firecracker/rootfs.squashfs"
 AGENT_BIN="./bin/agent"
 
 mkdir -p "$(dirname "$AGENT_BIN")"
@@ -29,6 +32,7 @@ fakeroot -- bash -c "
   set -euo pipefail
   unsquashfs -d '$TMPDIR/rootfs' '$ROOTFS_SRC'
   mkdir -p '$TMPDIR/rootfs/app' '$TMPDIR/rootfs/deps' '$TMPDIR/rootfs/tmp'
+  ln -sf /proc/net/pnp '$TMPDIR/rootfs/etc/resolv.conf'
   curl -fsSL '$pip_whl_url' -o '$TMPDIR/pip.whl'
   unzip -q '$TMPDIR/pip.whl' -d '$TMPDIR/rootfs/usr/lib/python3/dist-packages/'
   cp '$AGENT_BIN' '$TMPDIR/rootfs/usr/local/bin/agent-runner'
