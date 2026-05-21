@@ -184,9 +184,6 @@ func createBlankExt4(sizeMB int64) (string, error) {
 	}
 
 	path := file.Name()
-	defer func() {
-		_ = os.Remove(path)
-	}()
 
 	if err = os.Truncate(path, sizeMB*1024*1024); err != nil {
 		return "", err
