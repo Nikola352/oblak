@@ -98,10 +98,16 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	}
 
 	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
-	log.Println(detonationResult)
+	//log.Println(detonationResult)
+	//if err != nil {
+	//	return err
+	//}
+
+	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/ez")
 	if err != nil {
 		return err
 	}
+
 	return err
 }
 

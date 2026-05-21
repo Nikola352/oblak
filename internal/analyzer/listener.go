@@ -25,7 +25,7 @@ func StartListener(ctx context.Context) error {
 	cfg := consumerConfig(amqpURI, exchangeName, queueName)
 
 	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
-	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep")
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
 	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
 	gvisorBox, err := dast.NewGVisorBox()
 	if err != nil {

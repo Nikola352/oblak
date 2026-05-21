@@ -1,26 +1,26 @@
 package dast
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
-	"io"
+	"encoding/json"
 	"os"
+	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
 )
 
-// GVisorBox struct holds our initialized Docker client
+const runscLogDir = "/tmp/runsc-logs"
+
+// ---- Types ----
+
 type GVisorBox struct {
 	cli *client.Client
 }
 
-// NewGVisorBox initializes the Moby client using environment variables
-// and automatically negotiates the correct API version with the daemon.
 func NewGVisorBox() (*GVisorBox, error) {
-	// NewClientWithOpts is the standard for versions v24 through v28+
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithAPIVersionNegotiation(),
@@ -31,45 +31,23 @@ func NewGVisorBox() (*GVisorBox, error) {
 	return &GVisorBox{cli: cli}, nil
 }
 
-func createTarStream(localPath, fileNameInContainer string) (io.Reader, error) {
-	buf := new(bytes.Buffer)
-	tw := tar.NewWriter(buf)
+// ---- Detonate ----
 
-	content, err := os.ReadFile(localPath)
+func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionResult, error) {
+	before, err := snapshotLogFiles()
 	if err != nil {
-		return nil, err
+		before = map[string]struct{}{}
 	}
 
-	hdr := &tar.Header{
-		Name: fileNameInContainer,
-		Mode: 0644,
-		Size: int64(len(content)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return nil, err
-	}
-	if _, err := tw.Write(content); err != nil {
-		return nil, err
-	}
-	tw.Close()
-	return buf, nil
-}
-func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (string, error) {
 	config := &container.Config{
 		Image:           "python:3.11-alpine",
 		Cmd:             []string{"python", "/tmp/malware.py"},
 		Env:             []string{"PYTHONUNBUFFERED=1"},
 		NetworkDisabled: true,
-		User:            "nobody",
 	}
 
 	hostConfig := &container.HostConfig{
-		Runtime: "runsc",
-		Annotations: map[string]string{
-			"dev.gvisor.spec.strace":          "true",
-			"dev.gvisor.spec.strace.log_path": "/dev/stderr",
-		},
-		// 1. Disable AutoRemove to prevent the container from vanishing before we read logs
+		Runtime:    "runsc",
 		AutoRemove: false,
 		Resources: container.Resources{
 			Memory: 256 * 1024 * 1024,
@@ -78,51 +56,81 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (string, err
 
 	resp, err := b.cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
+	defer func(cli *client.Client, ctx context.Context, containerID string, options container.RemoveOptions) {
+		err := cli.ContainerRemove(ctx, containerID, options)
+		if err != nil {
 
-	// 2. Ensure cleanup happens even if the function returns early
-	defer b.cli.ContainerRemove(ctx, resp.ID, container.RemoveOptions{Force: true})
+		}
+	}(b.cli, ctx, resp.ID, container.RemoveOptions{Force: true})
 
 	tarStream, err := createTarStream(localPath, "malware.py")
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-
-	err = b.cli.CopyToContainer(ctx, resp.ID, "/tmp", tarStream, container.CopyToContainerOptions{})
-	if err != nil {
-		return "", err
+	if err := b.cli.CopyToContainer(ctx, resp.ID, "/tmp", tarStream, container.CopyToContainerOptions{}); err != nil {
+		return nil, err
 	}
 
 	if err := b.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return "", err
+		return nil, err
 	}
 
-	// 3. Wait for execution to finish
+	// Find the boot log for this run — appears within milliseconds of ContainerStart
+	bootLogPath, bootErr := findNewBootLog(before, 5*time.Second)
+
 	statusCh, errCh := b.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 	case <-statusCh:
 	}
 
-	// 4. Collect logs (Application output + gVisor strace)
-	out, err := b.cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
+	dockerOut, err := b.cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer out.Close()
+	defer dockerOut.Close()
 
-	var logBuf bytes.Buffer
-	_, err = stdcopy.StdCopy(&logBuf, &logBuf, out)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, dockerOut); err != nil {
+		return nil, err
+	}
+
+	rawStrace := ""
+	if bootErr != nil {
+		rawStrace = "(strace unavailable: " + bootErr.Error() + ")"
+	} else {
+		data, err := os.ReadFile(bootLogPath)
+		if err != nil {
+			rawStrace = "(could not read boot log: " + err.Error() + ")"
+		} else {
+			rawStrace = string(data)
+		}
+	}
+
+	return &ExecutionResult{
+		Stdout:    stdoutBuf.String(),
+		Stderr:    stderrBuf.String(),
+		Behavior:  parseBehaviorReport(rawStrace),
+		RawStrace: rawStrace,
+	}, nil
+}
+
+func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
+	f, err := os.Create(outputPath)
 	if err != nil {
-		return "", err
+		return err
 	}
+	defer f.Close()
 
-	return logBuf.String(), nil
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
