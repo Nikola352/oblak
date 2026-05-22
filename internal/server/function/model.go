@@ -10,6 +10,8 @@ const (
 	StatusQuarantined Status = "QUARANTINED"
 	StatusExtracted   Status = "EXTRACTED"
 	StatusProcessing  Status = "PROCESSING"
+	StatusScanning    Status = "SCANNING"
+	StatusDetected    Status = "DETECTED"
 	StatusReady       Status = "READY"
 	StatusFailed      Status = "FAILED"
 	StatusDeleted     Status = "DELETED"

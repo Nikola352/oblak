@@ -36,8 +36,6 @@ func createTarStream(localPath, fileNameInContainer string) (io.Reader, error) {
 	return buf, nil
 }
 
-// ---- Container helpers ----
-
 func (b *GVisorBox) readFileFromContainer(ctx context.Context, containerID, path string) (string, error) {
 	rc, _, err := b.cli.CopyFromContainer(ctx, containerID, path)
 	if err != nil {
@@ -56,8 +54,6 @@ func (b *GVisorBox) readFileFromContainer(ctx context.Context, containerID, path
 	}
 	return buf.String(), nil
 }
-
-// ---- Log file helpers ----
 
 func snapshotLogFiles() (map[string]struct{}, error) {
 	entries, err := os.ReadDir(runscLogDir)
@@ -92,15 +88,6 @@ func findNewBootLog(before map[string]struct{}, timeout time.Duration) (string, 
 	return "", fmt.Errorf("timed out waiting for new boot log in %s", runscLogDir)
 }
 
-// ---- Strace parser ----
-
-// parseBehaviorReport extracts only security-relevant events from gVisor strace output.
-//
-// gVisor exit line format:
-//
-//	I0521 22:49:06.655741   1 strace.go:605] [   1:   1] python X open(...) = 3 (0x3) (10.94µs)
-//
-// We only process X (exit) lines — they contain the return value and are never duplicated.
 func parseBehaviorReport(raw string) BehaviorReport {
 	var report BehaviorReport
 

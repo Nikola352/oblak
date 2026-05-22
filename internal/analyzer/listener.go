@@ -9,12 +9,13 @@ import (
 	"oblak/internal/analyzer/llm"
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
 	"oblak/internal/analyzer/sast"
+	"oblak/internal/server/database"
+	"oblak/internal/server/function"
 
 	"github.com/ThreeDotsLabs/watermill"
-	_ "github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
-	_ "github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 func StartListener(ctx context.Context) error {
@@ -29,6 +30,10 @@ func StartListener(ctx context.Context) error {
 	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
 	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
 	gvisorBox, err := dast.NewGVisorBox()
+
+	db, err := database.Connect(context.Background(), "postgres://postgres:postgres@localhost:5433/oblak")
+	var functionStore = function.NewStore(db)
+
 	if err != nil {
 		panic(err)
 	}
@@ -44,9 +49,6 @@ func StartListener(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 	go func() {
-		// 1. Listen for errors on the subscriber itself
-		// Some errors (like connection drops) are sent to the error channel
-		// if you had one configured, but let's at least log the routine start.
 		log.Println("Starting message consumption loop...")
 
 		for {
@@ -58,25 +60,56 @@ func StartListener(ctx context.Context) error {
 				}
 				log.Printf("Received message: %s", msg.UUID)
 				msg.Ack()
-				processMessage(ctx, msg, orchestrator)
+				err := processMessage(&ctx, msg, orchestrator, functionStore)
+				if err != nil {
+					panic(err)
+				}
+				return
 			case <-ctx.Done():
 				log.Printf("Shutting down")
-				sub.Close()
+				err := sub.Close()
+				if err != nil {
+					panic(err)
+				}
 				return
 			}
 		}
 	}()
 	return nil
 }
-func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator) error {
+func processMessage(ctx *context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store) error {
 	log.Println("Stiglo!")
-	fileName := string(msg.Payload)
-	fileName = "clean.py"
-	_, err := ao.AnalyzeFile(ctx, fileName)
+	id := uuid.New()
+	err := onLand(id, ctx, functionStore)
 	if err != nil {
 		return err
 	}
-	return nil
+	fileName := string(msg.Payload)
+	fileName = "clean.py"
+	verdict, err := ao.AnalyzeFile(ctx, fileName)
+
+	if err != nil {
+		return err
+	}
+
+	return updateFunctionStatus(id, verdict, ctx, functionStore)
+
+}
+
+func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, ctx *context.Context, store *function.Store) error {
+	var status = function.StatusDetected
+	if verdict == orchestrator2.MALICIOUS {
+		status = function.StatusDetected
+	}
+	return store.UpdateFunctionStatus(*ctx, id, status)
+
+}
+func onLand(id uuid.UUID, ctx *context.Context, store *function.Store) error {
+
+	var onLandStatus = function.StatusScanning
+
+	return store.UpdateFunctionStatus(*ctx, id, onLandStatus)
+
 }
 func consumerConfig(amqpURI, exchangeName, queueName string) amqp.Config {
 	return amqp.Config{
