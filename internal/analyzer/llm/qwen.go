@@ -55,11 +55,18 @@ func (j *QwenJudge) AskForLogs(ctx context.Context, logPath string) (*JudgeVerdi
 CRITICAL CLASSIFICATION LAW:
 If the "fs_access" array, "net_events" array, and "proc_events" array are all empty, or only contain standard console writes, you MUST immediately classify the file as "SAFE" with a confidence_score of 100. You are strictly FORBIDDEN from speculating, guessing, or assuming the program is hiding malicious behavior.
 
+NOISE FILTERING — IGNORE ALL OF THE FOLLOWING:
+- Any fs_access, net_events, or proc_events entries related to pip, setuptools, wheel, or package installation.
+- Network connections to pypi.org, files.pythonhosted.org, or any Python package index.
+- File writes under site-packages/, dist-info/, or any path containing "pip" or "setuptools".
+- execve calls invoking pip, pip3, or python -m pip.
+These are expected sandbox bootstrap activity and must never contribute to a MALICIOUS or SUSPICIOUS verdict.
+
 EVALUATION GUIDELINES:
-1. MALICIOUS TARGETS: Only trigger a MALICIOUS or SUSPICIOUS verdict if you see explicit, undisputed evidence of risk in the logs, such as:
+1. MALICIOUS TARGETS: Only trigger a MALICIOUS or SUSPICIOUS verdict if you see explicit, undisputed evidence of risk AFTER the installation phase, such as:
    - Reading system files: "/etc/passwd", "/etc/shadow", or "/root/.ssh" or other sensitive system data.
    - Spawning shells or system utilities via execve/vfork: e.g., ["whoami"], ["sh"], ["bash"], ["wget"]
-   - Active outbound network communication attempts (socket connect commands).
+   - Active outbound network communication to non-PyPI hosts.
 2. IGNORING ABSENCE: If none of the indicators in rule 1 are present, the file is automatically SAFE.
 
 Target Sandbox Execution Logs:

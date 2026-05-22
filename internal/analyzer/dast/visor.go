@@ -35,11 +35,16 @@ func NewGVisorBox() (*GVisorBox, error) {
 // ---- Detonate ----
 func createContainerConfig() *container.Config {
 	return &container.Config{
-		Image:           "python:3.11-alpine",
-		Cmd:             []string{"sh", "-c", "pwd && ls -la /tmp && python -c \"import handler; handler.handle()\""},
+		Image: "python:3.11-alpine",
+		Cmd: []string{"sh", "-c", `
+            if [ -f /tmp/requirements.txt ]; then
+                pip install -q -r /tmp/requirements.txt
+            fi
+            python -c "import handler; handler.handle()"
+        `},
 		Env:             []string{"PYTHONUNBUFFERED=1", "PYTHONPATH=/tmp"},
 		WorkingDir:      "/tmp",
-		NetworkDisabled: true,
+		NetworkDisabled: false,
 	}
 }
 func createHostConfig() *container.HostConfig {

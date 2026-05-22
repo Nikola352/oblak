@@ -89,6 +89,7 @@ func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2
 	}
 	fileName := string(msg.Payload)
 	fileName = "clean.tar.gz"
+	fileName = "clean_dependent.tar.gz"
 	//fileName = "dependency_vulnerable.tar.gz"
 	verdict, err := ao.AnalyzeFile(ctx, fileName)
 

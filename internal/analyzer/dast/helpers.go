@@ -106,8 +106,25 @@ func findNewBootLog(before map[string]struct{}, timeout time.Duration) (string, 
 	}
 	return "", fmt.Errorf("timed out waiting for new boot log in %s", runscLogDir)
 }
+func findHandlerStartTime(raw string) string {
+	for _, line := range splitLines(raw) {
+		if !containsStr(line, " X ") {
+			continue
+		}
+		body := extractBody(line)
+		if containsStr(body, "execve") && containsStr(body, "import handler") {
+			return extractTimestamp(line)
+		}
+	}
+	return ""
+}
 
+func timestampBefore(a, b string) bool {
+	// Timestamps are "HH:MM:SS.ffffff" — lexicographic comparison works fine
+	return a < b
+}
 func parseBehaviorReport(raw string) BehaviorReport {
+	handlerStart := findHandlerStartTime(raw)
 	var report BehaviorReport
 
 	fsOps := map[string]bool{
@@ -132,8 +149,10 @@ func parseBehaviorReport(raw string) BehaviorReport {
 		}
 
 		ts := extractTimestamp(line)
+		if handlerStart != "" && timestampBefore(ts, handlerStart) {
+			continue
+		}
 		body := extractBody(line)
-		//log.Printf("body: %q", body)
 		if body == "" {
 			continue
 		}
