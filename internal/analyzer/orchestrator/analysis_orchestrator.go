@@ -22,10 +22,10 @@ type AnalysisOrchestrator struct {
 	llmJudge          llm.JudgeLLM
 	detonationBox     dast.DetonationBox
 	unzipper          *UnzipperService
-	dependencyAuditor *audit.PipAuditor
+	dependencyAuditor audit.DependencyAuditor
 }
 
-func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox, auditor *audit.PipAuditor) *AnalysisOrchestrator {
+func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox, auditor audit.DependencyAuditor) *AnalysisOrchestrator {
 	endpoint := "localhost:9000"
 	accessKey := "minioadmin"
 	secretKey := "minioadmin"

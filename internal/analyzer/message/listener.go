@@ -35,7 +35,7 @@ func StartListener(ctx context.Context) error {
 	db, err := database.Connect(context.Background(), "postgres://postgres:postgres@localhost:5433/oblak")
 	var functionStore = function.NewStore(db)
 
-	var auditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
+	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
 
 	if err != nil {
 		panic(err)
