@@ -1,4 +1,4 @@
-package analyzer
+package message
 
 import (
 	"context"
@@ -60,7 +60,7 @@ func StartListener(ctx context.Context) error {
 				}
 				log.Printf("Received message: %s", msg.UUID)
 				msg.Ack()
-				err := processMessage(&ctx, msg, orchestrator, functionStore)
+				err := processMessage(ctx, msg, orchestrator, functionStore)
 				if err != nil {
 					panic(err)
 				}
@@ -77,7 +77,7 @@ func StartListener(ctx context.Context) error {
 	}()
 	return nil
 }
-func processMessage(ctx *context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store) error {
+func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store) error {
 	log.Println("Stiglo!")
 	id := uuid.New()
 	err := onLand(id, ctx, functionStore)
@@ -96,46 +96,14 @@ func processMessage(ctx *context.Context, msg *message.Message, ao *orchestrator
 
 }
 
-func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, ctx *context.Context, store *function.Store) error {
+func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, ctx context.Context, store *function.Store) error {
 	var status = function.StatusDetected
 	if verdict == orchestrator2.MALICIOUS {
 		status = function.StatusDetected
 	}
-	return store.UpdateFunctionStatus(*ctx, id, status)
-
+	return store.UpdateFunctionStatus(ctx, id, status)
 }
-func onLand(id uuid.UUID, ctx *context.Context, store *function.Store) error {
-
+func onLand(id uuid.UUID, ctx context.Context, store *function.Store) error {
 	var onLandStatus = function.StatusScanning
-
-	return store.UpdateFunctionStatus(*ctx, id, onLandStatus)
-
-}
-func consumerConfig(amqpURI, exchangeName, queueName string) amqp.Config {
-	return amqp.Config{
-		Connection: amqp.ConnectionConfig{
-			AmqpURI: amqpURI,
-		},
-		Marshaler: amqp.DefaultMarshaler{},
-		Exchange: amqp.ExchangeConfig{
-			GenerateName: amqp.GenerateExchangeNameConstant(exchangeName),
-			Type:         "fanout",
-			Durable:      true,
-		},
-		Queue: amqp.QueueConfig{
-			GenerateName: amqp.GenerateQueueNameConstant(queueName),
-			Durable:      true,
-		},
-		QueueBind: amqp.QueueBindConfig{
-			GenerateRoutingKey: func(topic string) string {
-				return ""
-			},
-		},
-		Consume: amqp.ConsumeConfig{
-			Qos: amqp.QosConfig{
-				PrefetchCount: 1,
-			},
-		},
-		TopologyBuilder: &amqp.DefaultTopologyBuilder{},
-	}
+	return store.UpdateFunctionStatus(ctx, id, onLandStatus)
 }

@@ -5,7 +5,7 @@ package main
 import (
 	"context"
 	"log"
-	"oblak/internal/analyzer"
+	"oblak/internal/analyzer/message"
 	"os"
 	"os/signal"
 	"sync"
@@ -16,7 +16,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
 	defer cancel()
-	if err := analyzer.StartListener(ctx); err != nil {
+	if err := message.StartListener(ctx); err != nil {
 		log.Fatalf("Failed to start service: %v", err)
 
 	}

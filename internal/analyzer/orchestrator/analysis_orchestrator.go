@@ -37,12 +37,12 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 	}
 }
 
-func (ao *AnalysisOrchestrator) AnalyzeFile(ctx *context.Context, fileName string) (AnalysisVerdict, error) {
+func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) (AnalysisVerdict, error) {
 	// 1. Get the filename from the RabbitMQ message payload
 	log.Printf("Processing file from queue: %s", fileName)
 
 	// 2. Download from MinIO to /tmp/quarantine/
-	localPath, err := ao.fileLoader.Download(*ctx, fileName)
+	localPath, err := ao.fileLoader.Download(ctx, fileName)
 	if err != nil {
 		log.Printf("Error downloading file: %v", err)
 		return FAILURE, err // Returning an error tells Watermill to Nack/Retry
@@ -69,7 +69,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx *context.Context, fileName strin
 	}(file)
 
 	// 4. Scan it
-	isClean, err := ao.antivirus.ScanStream(*ctx, file)
+	isClean, err := ao.antivirus.ScanStream(ctx, file)
 	if err != nil {
 		log.Printf("[ANTIVIRUS] Antivirus scan failed to execute: %v", err)
 		return FAILURE, err
@@ -97,7 +97,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx *context.Context, fileName strin
 		}
 	}
 
-	detonationResult, err := ao.detonationBox.Detonate(*ctx, localPath)
+	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
 	if err != nil {
 		return FAILURE, errors.New("[DETONATION] Error running detonation")
 	}
@@ -107,7 +107,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx *context.Context, fileName strin
 	}
 
 	log.Println("[ORCH] Asking LLM for log verdict")
-	verdict, err := ao.llmJudge.AskForLogs(*ctx, "/home/nikolavelemir/res")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res")
 	if err != nil {
 		return FAILURE, err
 	}
