@@ -8,15 +8,13 @@ build-server:
 	go build -o $(SERVER) ./cmd/server
 
 run-server: build-server
-	sudo setcap cap_net_admin,cap_sys_admin+ep $(SERVER)
-	$(SERVER)
+	sudo $(SERVER)
 
 rootfs:
 	./deployment/build-rootfs.sh
 
 run: rootfs build-server
-	sudo setcap cap_net_admin,cap_sys_admin+ep $(SERVER)
-	$(SERVER)
+	sudo $(SERVER)
 
 clean:
-	rm -f $(SERVER) $(AGENT) $(ROOTFS)
+	rm -f $(SERVER) $(ROOTFS)

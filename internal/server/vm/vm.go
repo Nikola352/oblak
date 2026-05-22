@@ -48,7 +48,7 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 	driveConfigs := make([]models.Drive, len(drives))
 	for i, mount := range drives {
 		cfg := mount.Config
-		cfg.DriveID = firecracker.String(fmt.Sprintf("drive-%d", i))
+		cfg.DriveID = firecracker.String(fmt.Sprintf("drive%d", i))
 		driveConfigs[i] = cfg
 	}
 
@@ -74,6 +74,14 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 		MachineCfg: models.MachineConfiguration{
 			MemSizeMib: firecracker.Int64(512),
 			VcpuCount:  firecracker.Int64(1),
+		},
+		NetworkInterfaces: firecracker.NetworkInterfaces{
+			{
+				CNIConfiguration: &firecracker.CNIConfiguration{
+					NetworkName: "oblak",
+					IfName:      "eth0",
+				},
+			},
 		},
 	}
 

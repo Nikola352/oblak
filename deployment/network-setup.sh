@@ -20,13 +20,24 @@ CNI_VERSION=v1.9.1
 curl -fsSL "https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz" \
     | tar -xz -C /opt/cni/bin
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
-git clone https://github.com/awslabs/tc-redirect-tap "$TMPDIR/tc-redirect-tap"
 if [[ -n "${SUDO_USER:-}" ]]; then
-    sudo -u "$SUDO_USER" bash -lc "go build -o '/opt/cni/bin/tc-redirect-tap' '$TMPDIR/tc-redirect-tap/cmd/tc-redirect-tap'"
+    USER_SHELL=$(getent passwd "$SUDO_USER" | cut -d: -f7)
+    BUILD_OUT=$(sudo -Hu "$SUDO_USER" mktemp)
+    sudo -Hu "$SUDO_USER" "$USER_SHELL" -lic "
+        set -e
+        src=\$(mktemp -d)
+        trap 'rm -rf \"\$src\"' EXIT
+        git clone https://github.com/awslabs/tc-redirect-tap \"\$src\"
+        cd \"\$src\"
+        go build -o '$BUILD_OUT' ./cmd/tc-redirect-tap
+    "
+    mv "$BUILD_OUT" /opt/cni/bin/tc-redirect-tap
+    chmod 755 /opt/cni/bin/tc-redirect-tap
 else
-    go build -o /opt/cni/bin/tc-redirect-tap "$TMPDIR/tc-redirect-tap/cmd/tc-redirect-tap"
+    src=$(mktemp -d)
+    trap 'rm -rf "$src"' EXIT
+    git clone https://github.com/awslabs/tc-redirect-tap "$src"
+    (cd "$src" && go build -o /opt/cni/bin/tc-redirect-tap ./cmd/tc-redirect-tap)
 fi
 
 # ---------------------------------------------------------------------------
@@ -42,6 +53,15 @@ fi
 # ---------------------------------------------------------------------------
 
 mkdir -p /etc/cni/conf.d
+
+# Ubuntu uses 127.0.0.53 (systemd-resolved) as its nameserver, which is a
+# loopback address unreachable from inside a VM. Provide a file with public
+# DNS servers for host-local to pass through CNI into the vm's ip= kernel arg.
+cat > /etc/cni/vm-resolv.conf <<'EOF'
+nameserver 8.8.8.8
+nameserver 1.1.1.1
+EOF
+
 cat > /etc/cni/conf.d/oblak.conflist <<EOF
 {
   "name": "oblak",
@@ -53,7 +73,7 @@ cat > /etc/cni/conf.d/oblak.conflist <<EOF
       "ipam": {
         "type": "host-local",
         "subnet": "${VM_SUBNET}",
-        "resolvConf": "/etc/resolv.conf"
+        "resolvConf": "/etc/cni/vm-resolv.conf"
       }
     },
     {
@@ -62,6 +82,20 @@ cat > /etc/cni/conf.d/oblak.conflist <<EOF
   ]
 }
 EOF
+
+# ---------------------------------------------------------------------------
+# Network namespace directory
+#
+# The SDK creates a netns for each VM under /var/run/netns. /var/run is a
+# tmpfs owned by root (755), so the server process — even with CAP_NET_ADMIN
+# and CAP_SYS_ADMIN — cannot create it without CAP_DAC_OVERRIDE.
+# Pre-creating it here and giving ownership to the invoking user fixes this.
+# Recreate after reboot (same as the iptables rules below).
+# ---------------------------------------------------------------------------
+
+SERVER_USER="${SUDO_USER:-$(whoami)}"
+mkdir -p /var/run/netns
+chown "$SERVER_USER" /var/run/netns
 
 # ---------------------------------------------------------------------------
 # IP forwarding
