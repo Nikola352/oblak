@@ -2,6 +2,7 @@ package message
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"oblak/internal/analyzer/audit"
@@ -81,28 +82,36 @@ func StartListener(ctx context.Context) error {
 	return nil
 }
 func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store) error {
-	log.Println("Stiglo!")
-	id := uuid.New()
-	err := onLand(id, ctx, functionStore)
+	log.Println("Message received from queue, processing payload!")
+	payload, err := unmarshalMessage(msg)
 	if err != nil {
 		return err
 	}
-	fileName := string(msg.Payload)
-	fileName = "clean.tar.gz"
-	fileName = "clean_dependent.tar.gz"
-	//fileName = "dependency_vulnerable.tar.gz"
+	err = onLand(payload.FunctionId, ctx, functionStore)
+	if err != nil {
+		return err
+	}
+	fileName := payload.Path
 	verdict, err := ao.AnalyzeFile(ctx, fileName)
 
 	if err != nil {
 		return err
 	}
 
-	return updateFunctionStatus(id, verdict, ctx, functionStore)
+	return updateFunctionStatus(payload.FunctionId, verdict, ctx, functionStore)
 
 }
-
+func unmarshalMessage(msg *message.Message) (*FunctionMessage, error) {
+	var msgData FunctionMessage
+	if err := json.Unmarshal(msg.Payload, &msgData); err != nil {
+		log.Printf("[QUEUE ERROR] Failed parsing JSON payload payload structures: %v", err)
+		// Returning an error here tells Watermill to Nack/Retry the message
+		return nil, fmt.Errorf("malformed function message metadata format: %w", err)
+	}
+	return &msgData, nil
+}
 func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, ctx context.Context, store *function.Store) error {
-	var status = function.StatusDetected
+	var status = function.StatusReady
 	if verdict == orchestrator2.MALICIOUS {
 		status = function.StatusDetected
 	}

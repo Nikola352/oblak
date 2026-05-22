@@ -1,13 +1,15 @@
 package analyzer_mock
 
 import (
+	"encoding/json"
 	"fmt"
+	message2 "oblak/internal/analyzer/message"
+	"oblak/internal/server/function"
 
 	"github.com/ThreeDotsLabs/watermill"
-	_ "github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
-	_ "github.com/ThreeDotsLabs/watermill/message"
+	"github.com/google/uuid"
 )
 
 func StartPublisher() error {
@@ -19,15 +21,27 @@ func StartPublisher() error {
 	if err != nil {
 		return fmt.Errorf("failed to create subscriber: %w", err)
 	}
-	msg := message.NewMessage(watermill.NewUUID(), []byte("Hello, Fanout!"))
-
-	// 3. Publish to the exchange
-	// Note: In fanout, the "topic" string below is ignored by RabbitMQ,
-	// but it is still required by the Watermill API.
-	err = publisher.Publish("some_topic", msg)
+	id, err := uuid.Parse("dde950d8-0437-4a8a-98cf-70a28096c43b")
 	if err != nil {
 		panic(err)
 	}
+	funcMessage := message2.FunctionMessage{
+		Path:       "clean.tar.gz",
+		Bucket:     "quarantine",
+		Status:     function.StatusQuarantined,
+		FunctionId: id,
+	}
+	payloadBytes, err := json.Marshal(funcMessage)
+	if err != nil {
+		return fmt.Errorf("failed to marshal function message struct: %w", err)
+	}
+	msg := message.NewMessage(watermill.NewUUID(), payloadBytes)
+
+	err = publisher.Publish("some_topic", msg)
+	if err != nil {
+		return fmt.Errorf("failed to broadcast payload to rabbitmq exchange: %w", err)
+	}
+
 	return nil
 }
 
