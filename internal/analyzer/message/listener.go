@@ -85,7 +85,7 @@ func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2
 		return err
 	}
 	fileName := string(msg.Payload)
-	fileName = "clean.py"
+	fileName = "clean.tar.gz"
 	verdict, err := ao.AnalyzeFile(ctx, fileName)
 
 	if err != nil {

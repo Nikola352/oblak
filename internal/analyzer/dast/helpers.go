@@ -6,36 +6,55 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-func createTarStream(localPath, fileNameInContainer string) (io.Reader, error) {
+// createTarStream walks localDir and packs every file into a tar archive,
+// preserving relative paths so the container receives the same layout under /tmp/.
+func createTarStream(localDir string) (io.Reader, error) {
 	buf := new(bytes.Buffer)
 	tw := tar.NewWriter(buf)
 
-	content, err := os.ReadFile(localPath)
+	count := 0
+	err := filepath.Walk(localDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		count++
+		log.Printf("packing: %s", path)
+
+		rel, err := filepath.Rel(localDir, path)
+		if err != nil {
+			return err
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		hdr := &tar.Header{
+			Name: rel, // e.g. "main.py", "lib/utils.py"
+			Mode: 0644,
+			Size: int64(len(content)),
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			return err
+		}
+		_, err = tw.Write(content)
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	hdr := &tar.Header{
-		Name: fileNameInContainer,
-		Mode: 0644,
-		Size: int64(len(content)),
-	}
-	if err := tw.WriteHeader(hdr); err != nil {
-		return nil, err
-	}
-	if _, err := tw.Write(content); err != nil {
-		return nil, err
-	}
+	log.Printf("packed %d files", count)
 	tw.Close()
 	return buf, nil
 }
-
 func (b *GVisorBox) readFileFromContainer(ctx context.Context, containerID, path string) (string, error) {
 	rc, _, err := b.cli.CopyFromContainer(ctx, containerID, path)
 	if err != nil {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -31,27 +33,35 @@ func NewGVisorBox() (*GVisorBox, error) {
 }
 
 // ---- Detonate ----
-
-func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionResult, error) {
-	before, err := snapshotLogFiles()
-	if err != nil {
-		before = map[string]struct{}{}
-	}
-
-	config := &container.Config{
+func createContainerConfig() *container.Config {
+	return &container.Config{
 		Image:           "python:3.11-alpine",
-		Cmd:             []string{"python", "/tmp/script.py"},
-		Env:             []string{"PYTHONUNBUFFERED=1"},
+		Cmd:             []string{"sh", "-c", "pwd && ls -la /tmp && python -c \"import handler; handler.handle()\""},
+		Env:             []string{"PYTHONUNBUFFERED=1", "PYTHONPATH=/tmp"},
+		WorkingDir:      "/tmp",
 		NetworkDisabled: true,
 	}
-
-	hostConfig := &container.HostConfig{
+}
+func createHostConfig() *container.HostConfig {
+	return &container.HostConfig{
 		Runtime:    "runsc",
 		AutoRemove: false,
 		Resources: container.Resources{
 			Memory: 256 * 1024 * 1024,
 		},
 	}
+
+}
+func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionResult, error) {
+	before, err := snapshotLogFiles()
+	if err != nil {
+		before = map[string]struct{}{}
+	}
+
+	//base := filepath.Base(dirPath)
+	config := createContainerConfig()
+
+	hostConfig := createHostConfig()
 
 	resp, err := b.cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
@@ -64,19 +74,20 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionR
 		}
 	}(b.cli, ctx, resp.ID, container.RemoveOptions{Force: true})
 
-	tarStream, err := createTarStream(localPath, "script.py")
+	tarStream, err := createTarStream(dirPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("createTarStream: %w", err)
 	}
+	log.Printf("copying files from %q into container", dirPath)
 	if err := b.cli.CopyToContainer(ctx, resp.ID, "/tmp", tarStream, container.CopyToContainerOptions{}); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("CopyToContainer: %w", err)
 	}
+	log.Printf("copy done")
 
 	if err := b.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return nil, err
 	}
 
-	// Find the boot log for this run — appears within milliseconds of ContainerStart
 	bootLogPath, bootErr := findNewBootLog(before, 5*time.Second)
 
 	statusCh, errCh := b.cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
@@ -98,10 +109,13 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionR
 	defer dockerOut.Close()
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	if _, err := stdcopy.StdCopy(&stdoutBuf, &stderrBuf, dockerOut); err != nil {
+	if _, err := stdcopy.StdCopy(
+		io.MultiWriter(&stdoutBuf, os.Stdout),
+		io.MultiWriter(&stderrBuf, os.Stderr),
+		dockerOut,
+	); err != nil {
 		return nil, err
 	}
-
 	rawStrace := ""
 	if bootErr != nil {
 		rawStrace = "(strace unavailable: " + bootErr.Error() + ")"

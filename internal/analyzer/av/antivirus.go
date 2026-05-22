@@ -7,4 +7,5 @@ import (
 
 type Antivirus interface {
 	ScanStream(ctx context.Context, reader io.Reader) (bool, error)
+	ScanLocalPath(path string) (bool, error)
 }

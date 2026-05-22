@@ -9,6 +9,7 @@ import (
 	"oblak/internal/analyzer/llm"
 	"oblak/internal/analyzer/sanitizer"
 	"oblak/internal/analyzer/sast"
+	"oblak/internal/server/filestore"
 	"os"
 )
 
@@ -19,13 +20,14 @@ type AnalysisOrchestrator struct {
 	sastAnalyzer  sast.StaticAnalyzer
 	llmJudge      llm.JudgeLLM
 	detonationBox dast.DetonationBox
+	unzipper      *UnzipperService
 }
 
 func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox) *AnalysisOrchestrator {
 	endpoint := "localhost:9000"
 	accessKey := "minioadmin"
 	secretKey := "minioadmin"
-	fileloader := NewFileLoader(endpoint, accessKey, secretKey, "quarantine")
+	fileloader := NewFileLoader(endpoint, accessKey, secretKey, string(filestore.QuarantineBucket))
 
 	return &AnalysisOrchestrator{
 		sanitizer:     sanitizer.CodeSanitizer{},
@@ -34,6 +36,7 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 		fileLoader:    fileloader,
 		sastAnalyzer:  analyzer,
 		llmJudge:      llm,
+		unzipper:      NewUnzipper(-1),
 	}
 }
 
@@ -54,22 +57,24 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 		if err != nil {
 		}
 	}(localPath)
+	extractPath := "/tmp/quarantine/extracted"
 
-	// 3. Open the downloaded file to pass it to ClamAV
-	file, err := os.Open(localPath)
+	defer func(dir string) {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Printf("[CLEANUP] Warning: Failed to destroy workspace directory %s: %v", dir, err)
+		} else {
+			log.Printf("[CLEANUP] Successfully purged sandbox workspace: %s", dir)
+		}
+	}(extractPath)
+
+	err = ao.unzipper.Extract(localPath, extractPath)
+	log.Println(err)
 	if err != nil {
-		log.Printf("Error opening local file: %v", err)
 		return FAILURE, err
 	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-
-		}
-	}(file)
 
 	// 4. Scan it
-	isClean, err := ao.antivirus.ScanStream(ctx, file)
+	isClean, err := ao.antivirus.ScanLocalPath(extractPath)
 	if err != nil {
 		log.Printf("[ANTIVIRUS] Antivirus scan failed to execute: %v", err)
 		return FAILURE, err
@@ -80,7 +85,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 		return FAILURE, errors.New("[ANTIVIRUS] file is UNSAFE. REJECTING FILE")
 	}
 
-	semReport, err := ao.sastAnalyzer.Run(localPath)
+	semReport, err := ao.sastAnalyzer.Run(extractPath)
 	if err != nil {
 		log.Fatalf("[SAST] Error running semgrep: %v", err)
 	}
@@ -97,7 +102,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 		}
 	}
 
-	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
+	detonationResult, err := ao.detonationBox.Detonate(ctx, extractPath)
 	if err != nil {
 		return FAILURE, errors.New("[DETONATION] Error running detonation")
 	}
