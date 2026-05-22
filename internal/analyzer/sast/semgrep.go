@@ -33,6 +33,6 @@ func (a SemgrepAnalyzer) Run(targetPath string) (*SemgrepOutput, error) {
 	if err := json.Unmarshal(output, &report); err != nil {
 		return nil, fmt.Errorf("failed to parse semgrep json: %w", err)
 	}
-	fmt.Println("[SEMGREP] Finished analyzing!")
+	log.Println("[SEMGREP] Finished analyzing!")
 	return &report, nil
 }

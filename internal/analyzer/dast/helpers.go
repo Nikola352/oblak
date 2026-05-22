@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,7 +127,7 @@ func parseBehaviorReport(raw string) BehaviorReport {
 
 		ts := extractTimestamp(line)
 		body := extractBody(line)
-		log.Printf("body: %q", body)
+		//log.Printf("body: %q", body)
 		if body == "" {
 			continue
 		}

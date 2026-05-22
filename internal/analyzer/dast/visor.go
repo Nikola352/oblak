@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"os"
 	"time"
 
@@ -122,6 +123,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionR
 }
 
 func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
+	log.Println("Writing JSON report")
 	f, err := os.Create(outputPath)
 	if err != nil {
 		return err
@@ -130,5 +132,6 @@ func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) 
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
+
 	return enc.Encode(result)
 }

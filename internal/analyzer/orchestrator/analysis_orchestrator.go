@@ -1,4 +1,4 @@
-package analyzer
+package orchestrator
 
 import (
 	"context"
@@ -87,7 +87,8 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	}
 	if len(semReport.Results) != 0 {
 		for _, finding := range semReport.Results {
-			verdict, err := ao.askLlm(finding)
+			verdict, err := ao.askLLMForSast(finding)
+			log.Println(err)
 			if err != nil {
 				continue
 			}
@@ -98,20 +99,24 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	}
 
 	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
-	//log.Println(detonationResult)
-	//if err != nil {
-	//	return err
-	//}
-
-	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/ez")
+	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/res.json")
+	log.Println(err)
 	if err != nil {
 		return err
 	}
 
+	log.Println("[ORCH] Asking LLM for log verdict")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res.json")
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	log.Println("LLM RESPONDED!")
+	log.Println(verdict.Verdict)
 	return err
 }
 
-func (ao *AnalysisOrchestrator) askLlm(finding sast.SemgrepResult) (llm.SastVerdict, error) {
+func (ao *AnalysisOrchestrator) askLLMForSast(finding sast.SemgrepResult) (llm.SastVerdict, error) {
 	msg := finding.Extra.Message
 	cleanCode := ao.sanitizer.SanitizeCode(finding.Extra.Lines)
 	verdict, err := ao.llmJudge.AskForSAST(msg, cleanCode)

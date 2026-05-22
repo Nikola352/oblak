@@ -7,6 +7,7 @@ import (
 	"oblak/internal/analyzer/av"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
+	orchestrator2 "oblak/internal/analyzer/orchestrator"
 	"oblak/internal/analyzer/sast"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -31,7 +32,7 @@ func StartListener(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	orchestrator := NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox)
+	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {
@@ -67,10 +68,10 @@ func StartListener(ctx context.Context) error {
 	}()
 	return nil
 }
-func processMessage(ctx context.Context, msg *message.Message, ao *AnalysisOrchestrator) error {
+func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator) error {
 	log.Println("Stiglo!")
 	fileName := string(msg.Payload)
-	fileName = "prober.py"
+	fileName = "clean.py"
 	err := ao.AnalyzeFile(ctx, fileName)
 	if err != nil {
 		return err
