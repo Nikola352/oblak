@@ -18,9 +18,6 @@ func NewClamAV(clamPath string) *ClamAV {
 		client: clamd.NewClamd(clamPath),
 	}
 }
-func (a *ClamAV) Ping() error {
-	return a.client.Ping()
-}
 
 func (a *ClamAV) ScanStream(ctx context.Context, reader io.Reader) (bool, error) {
 	log.Println("[CLAMAV] Beginning scan for viruses")
