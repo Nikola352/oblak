@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
@@ -14,29 +15,31 @@ import (
 )
 
 type AnalysisOrchestrator struct {
-	sanitizer     sanitizer.CodeSanitizer
-	antivirus     av.Antivirus
-	fileLoader    *FileLoader
-	sastAnalyzer  sast.StaticAnalyzer
-	llmJudge      llm.JudgeLLM
-	detonationBox dast.DetonationBox
-	unzipper      *UnzipperService
+	sanitizer         sanitizer.CodeSanitizer
+	antivirus         av.Antivirus
+	fileLoader        *FileLoader
+	sastAnalyzer      sast.StaticAnalyzer
+	llmJudge          llm.JudgeLLM
+	detonationBox     dast.DetonationBox
+	unzipper          *UnzipperService
+	dependencyAuditor *audit.PipAuditor
 }
 
-func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox) *AnalysisOrchestrator {
+func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox, auditor *audit.PipAuditor) *AnalysisOrchestrator {
 	endpoint := "localhost:9000"
 	accessKey := "minioadmin"
 	secretKey := "minioadmin"
 	fileloader := NewFileLoader(endpoint, accessKey, secretKey, string(filestore.QuarantineBucket))
 
 	return &AnalysisOrchestrator{
-		sanitizer:     sanitizer.CodeSanitizer{},
-		antivirus:     av,
-		detonationBox: box,
-		fileLoader:    fileloader,
-		sastAnalyzer:  analyzer,
-		llmJudge:      llm,
-		unzipper:      NewUnzipper(-1),
+		sanitizer:         sanitizer.CodeSanitizer{},
+		antivirus:         av,
+		detonationBox:     box,
+		fileLoader:        fileloader,
+		sastAnalyzer:      analyzer,
+		llmJudge:          llm,
+		unzipper:          NewUnzipper(-1),
+		dependencyAuditor: auditor,
 	}
 }
 
@@ -68,6 +71,13 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	}(extractPath)
 
 	err = ao.unzipper.Extract(localPath, extractPath)
+	log.Println(err)
+	if err != nil {
+		return FAILURE, err
+	}
+	log.Println("UNzziped")
+
+	err = ao.dependencyAuditor.Audit(ctx, extractPath)
 	log.Println(err)
 	if err != nil {
 		return FAILURE, err

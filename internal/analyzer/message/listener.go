@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
@@ -34,10 +35,12 @@ func StartListener(ctx context.Context) error {
 	db, err := database.Connect(context.Background(), "postgres://postgres:postgres@localhost:5433/oblak")
 	var functionStore = function.NewStore(db)
 
+	var auditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
+
 	if err != nil {
 		panic(err)
 	}
-	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox)
+	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {
@@ -86,6 +89,7 @@ func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2
 	}
 	fileName := string(msg.Payload)
 	fileName = "clean.tar.gz"
+	//fileName = "dependency_vulnerable.tar.gz"
 	verdict, err := ao.AnalyzeFile(ctx, fileName)
 
 	if err != nil {
