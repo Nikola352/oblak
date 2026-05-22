@@ -184,17 +184,35 @@ func parseBehaviorReport(raw string) BehaviorReport {
 }
 
 // isNoisyFSPath filters out Python runtime internals we don't care about.
+// isNoisyFSPath filters out Python runtime internals we don't care about.
 func isNoisyFSPath(path string) bool {
-	noisy := []string{
-		"/usr/local/lib/python",
+	if path == "/tmp/script.py" || path == "script.py" {
+		return true
+	}
+	if path == "" || path == "/" || path == "/tmp" || path == "/tmp/" {
+		return true
+	}
+
+	// Wipes out entire directory hierarchies common to interpreter startups
+	if strings.HasPrefix(path, "/usr/local/") ||
+		strings.HasPrefix(path, "/usr/lib/") ||
+		strings.HasPrefix(path, "/root/.local/") {
+		return true
+	}
+
+	// Fallback catch-all strings
+	noisySubstrings := []string{
 		"__pycache__",
 		".pyc",
-		"/usr/local/bin/python",
-		"/usr/lib/",
-		"/usr/local/lib/",
+		"pyvenv.cfg",
+		"pybuilddir.txt",
+		"Setup.local",
+		"python311.zip",
+		"/etc/localtime",
 	}
-	for _, n := range noisy {
-		if containsStr(path, n) {
+
+	for _, sub := range noisySubstrings {
+		if strings.Contains(path, sub) {
 			return true
 		}
 	}

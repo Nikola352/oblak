@@ -40,7 +40,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionR
 
 	config := &container.Config{
 		Image:           "python:3.11-alpine",
-		Cmd:             []string{"python", "/tmp/malware.py"},
+		Cmd:             []string{"python", "/tmp/script.py"},
 		Env:             []string{"PYTHONUNBUFFERED=1"},
 		NetworkDisabled: true,
 	}
@@ -64,7 +64,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, localPath string) (*ExecutionR
 		}
 	}(b.cli, ctx, resp.ID, container.RemoveOptions{Force: true})
 
-	tarStream, err := createTarStream(localPath, "malware.py")
+	tarStream, err := createTarStream(localPath, "script.py")
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +128,12 @@ func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		err := f.Close()
+		if err != nil {
+
+		}
+	}(f)
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")

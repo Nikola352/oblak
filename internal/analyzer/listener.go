@@ -72,7 +72,7 @@ func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2
 	log.Println("Stiglo!")
 	fileName := string(msg.Payload)
 	fileName = "clean.py"
-	err := ao.AnalyzeFile(ctx, fileName)
+	_, err := ao.AnalyzeFile(ctx, fileName)
 	if err != nil {
 		return err
 	}

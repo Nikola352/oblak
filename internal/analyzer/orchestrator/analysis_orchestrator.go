@@ -37,7 +37,7 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 	}
 }
 
-func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) error {
+func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) (AnalysisVerdict, error) {
 	// 1. Get the filename from the RabbitMQ message payload
 	log.Printf("Processing file from queue: %s", fileName)
 
@@ -45,14 +45,13 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	localPath, err := ao.fileLoader.Download(ctx, fileName)
 	if err != nil {
 		log.Printf("Error downloading file: %v", err)
-		return err // Returning an error tells Watermill to Nack/Retry
+		return FAILURE, err // Returning an error tells Watermill to Nack/Retry
 	}
 
 	// Ensure we clean up the local file after the scan finishes
 	defer func(name string) {
 		err := os.Remove(name)
 		if err != nil {
-
 		}
 	}(localPath)
 
@@ -60,7 +59,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	file, err := os.Open(localPath)
 	if err != nil {
 		log.Printf("Error opening local file: %v", err)
-		return err
+		return FAILURE, err
 	}
 	defer func(file *os.File) {
 		err := file.Close()
@@ -73,12 +72,12 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	isClean, err := ao.antivirus.ScanStream(ctx, file)
 	if err != nil {
 		log.Printf("[ANTIVIRUS] Antivirus scan failed to execute: %v", err)
-		return err
+		return FAILURE, err
 	}
 
 	// 5. Act on the results
 	if !isClean {
-		return errors.New("[ANTIVIRUS] file is UNSAFE. REJECTING FILE")
+		return FAILURE, errors.New("[ANTIVIRUS] file is UNSAFE. REJECTING FILE")
 	}
 
 	semReport, err := ao.sastAnalyzer.Run(localPath)
@@ -93,27 +92,31 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 				continue
 			}
 			if verdict == llm.MALICIOUS {
-				return errors.New("LLM Agent flagged the code as malicious, stopping investigation")
+				return MALICIOUS, errors.New("LLM Agent flagged the code as malicious, stopping investigation")
 			}
 		}
 	}
 
 	detonationResult, err := ao.detonationBox.Detonate(ctx, localPath)
-	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/res.json")
-	log.Println(err)
 	if err != nil {
-		return err
+		return FAILURE, errors.New("[DETONATION] Error running detonation")
+	}
+	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/res")
+	if err != nil {
+		return FAILURE, err
 	}
 
 	log.Println("[ORCH] Asking LLM for log verdict")
-	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res.json")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res")
 	if err != nil {
-		log.Println(err)
-		return err
+		return FAILURE, err
 	}
 	log.Println("LLM RESPONDED!")
-	log.Println(verdict.Verdict)
-	return err
+	log.Printf("%s %s %d", verdict.Verdict, verdict.Summary, verdict.ConfidenceScore)
+	if verdict.Verdict == "MALICIOUS" {
+		return MALICIOUS, nil
+	}
+	return SAFE, nil
 }
 
 func (ao *AnalysisOrchestrator) askLLMForSast(finding sast.SemgrepResult) (llm.SastVerdict, error) {
