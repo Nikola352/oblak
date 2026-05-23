@@ -21,33 +21,27 @@ import (
 	"github.com/google/uuid"
 )
 
+type ListenerDependencies struct {
+	FileStore     *orchestrator2.FileStore
+	FunctionStore *function.Store
+	Orchestrator  *orchestrator2.AnalysisOrchestrator
+}
+
 func StartListener(ctx context.Context) error {
-	queueName := "analyzer_data"
-	amqpURI := "amqp://admin:admin@localhost:5672/"
-	exchangeName := "analyzer"
-	topicName := "analyzer"
+
+	deps, err := wireDependencies(ctx)
+	if err != nil {
+		return fmt.Errorf("failed wiring application components: %w", err)
+	}
+
+	const (
+		queueName    = "analyzer_data"
+		amqpURI      = "amqp://admin:admin@localhost:5672/"
+		exchangeName = "analyzer"
+		topicName    = "analyzer"
+	)
 
 	cfg := consumerConfig(amqpURI, exchangeName, queueName)
-
-	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
-	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
-	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
-	gvisorBox, err := dast.NewGVisorBox()
-	endpoint := "localhost:9000"
-	accessKey := "minioadmin"
-	secretKey := "minioadmin"
-
-	fileStore := orchestrator2.NewFileStore(endpoint, accessKey, secretKey, string(filestore.QuarantineBucket))
-
-	db, err := database.Connect(context.Background(), "postgres://postgres:postgres@localhost:5433/oblak")
-	var functionStore = function.NewStore(db)
-
-	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
-
-	if err != nil {
-		panic(err)
-	}
-	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor, fileStore)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {
@@ -70,7 +64,7 @@ func StartListener(ctx context.Context) error {
 				}
 				log.Printf("Received message: %s", msg.UUID)
 				msg.Ack()
-				err := processMessage(ctx, msg, orchestrator, functionStore, fileStore)
+				err := processMessage(ctx, msg, deps)
 				if err != nil {
 					panic(err)
 				}
@@ -87,28 +81,28 @@ func StartListener(ctx context.Context) error {
 	}()
 	return nil
 }
-func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store, fileStore *orchestrator2.FileStore) error {
+func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDependencies) error {
 	log.Println("Message received from queue, processing payload!")
 	payload, err := unmarshalMessage(msg)
 	if err != nil {
 		return err
 	}
-	err = onLand(payload.FunctionId, ctx, functionStore)
+	err = onLand(payload.FunctionId, ctx, deps.FunctionStore)
 	if err != nil {
 		return err
 	}
 	fileName := payload.Path
-	verdict, err := ao.AnalyzeFile(ctx, fileName)
+	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName)
 
 	if err != nil {
 		return err
 	}
 
-	err = updateFunctionStatus(payload.FunctionId, verdict, ctx, functionStore)
+	err = updateFunctionStatus(payload.FunctionId, verdict, ctx, deps.FunctionStore)
 	if err != nil {
 		return err
 	}
-	err = fileStore.Move(ctx, fileName, string(filestore.FunctionsBucket))
+	err = deps.FileStore.Move(ctx, fileName, string(filestore.FunctionsBucket))
 
 	return err
 }
@@ -130,4 +124,34 @@ func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, c
 func onLand(id uuid.UUID, ctx context.Context, store *function.Store) error {
 	var onLandStatus = function.StatusScanning
 	return store.UpdateFunctionStatus(ctx, id, onLandStatus)
+}
+
+func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
+	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
+	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
+	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
+
+	gvisorBox, err := dast.NewGVisorBox()
+	if err != nil {
+		return nil, fmt.Errorf("failed bootstrapping gvisor runtime container layout: %w", err)
+	}
+
+	const minioEndpoint = "localhost:9000"
+	fileStore := orchestrator2.NewFileStore(minioEndpoint, "minioadmin", "minioadmin", string(filestore.QuarantineBucket))
+
+	db, err := database.Connect(ctx, "postgres://postgres:postgres@localhost:5433/oblak")
+	if err != nil {
+		return nil, fmt.Errorf("database connection initialization failed: %w", err)
+	}
+	functionStore := function.NewStore(db)
+
+	// 3. Construct Composite Orchestrator Aggregator
+	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor, fileStore)
+
+	return &ListenerDependencies{
+		Orchestrator:  orchestrator,
+		FunctionStore: functionStore,
+		FileStore:     fileStore,
+	}, nil
 }
