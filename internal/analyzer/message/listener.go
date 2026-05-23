@@ -7,6 +7,7 @@ import (
 	"log"
 	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/config"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
@@ -129,20 +130,20 @@ func onLand(id uuid.UUID, ctx context.Context, store *function.Store) error {
 
 func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
 	bucketRegistry := filestore.NewBucketRegistry()
-	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
-	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep")
-	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
-	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/pip-audit")
+	var myJudge llm.JudgeLLM = llm.NewQwenJudge(config.Cfg.OllamaURL)
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer(config.Cfg.SastBinaryPath)
+
+	var clamAV av.Antivirus = av.NewClamAV(config.Cfg.AntivirusURL)
+	var auditor audit.DependencyAuditor = audit.NewPipAuditor(config.Cfg.AuditBinaryPath)
 
 	gvisorBox, err := dast.NewGVisorBox()
 	if err != nil {
 		return nil, fmt.Errorf("failed bootstrapping gvisor runtime container layout: %w", err)
 	}
 
-	const minioEndpoint = "localhost:9000"
-	fileStore := orchestrator2.NewFileStore(minioEndpoint, "minioadmin", "minioadmin", bucketRegistry.Name(filestore.QuarantineBucket))
+	fileStore := orchestrator2.NewFileStore(config.Cfg.Minio.Endpoint, config.Cfg.Minio.AccessKey, config.Cfg.Minio.SecretKey, bucketRegistry.Name(filestore.QuarantineBucket))
 
-	db, err := database.Connect(ctx, "postgres://postgres:postgres@localhost:5433/oblak")
+	db, err := database.Connect(ctx, config.Cfg.DbConnectionString)
 	if err != nil {
 		return nil, fmt.Errorf("database connection initialization failed: %w", err)
 	}

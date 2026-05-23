@@ -6,6 +6,7 @@ import (
 	"log"
 	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/config"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
 	"oblak/internal/analyzer/sanitizer"
@@ -111,13 +112,13 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	if err != nil {
 		return FAILURE, errors.New("[DETONATION] Error running detonation")
 	}
-	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikola-velemir/res")
+	err = ao.detonationBox.WriteJSONReport(detonationResult, config.Cfg.JSONReportOutputPath)
 	if err != nil {
 		return FAILURE, err
 	}
 
 	log.Println("[ORCH] Asking LLM for log verdict")
-	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikola-velemir/res")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, config.Cfg.JSONReportOutputPath)
 	if err != nil {
 		return FAILURE, err
 	}
