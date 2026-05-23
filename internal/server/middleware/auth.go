@@ -6,12 +6,12 @@ import (
 	"crypto/hmac"
 	"errors"
 	"io"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	"oblak/internal/api"
 	"oblak/internal/server/apperr"
 	"oblak/internal/server/authkey"
 	"oblak/internal/signing"
@@ -21,65 +21,52 @@ type keyStore interface {
 	GetAuthKey(ctx context.Context, authId string) (authkey.AuthKey, error)
 }
 
-func RequireAuth(store keyStore) api.StrictMiddlewareFunc {
-	return func(f api.StrictHandlerFunc, operationID string) api.StrictHandlerFunc {
-		if isPublic(operationID) {
-			return f
+func RequireAuth(store keyStore) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if isPublic(c.FullPath()) {
+			c.Next()
+			return
 		}
-		return func(c *gin.Context, req interface{}) (interface{}, error) {
-			credential, signature, err := parseAuthHeader(c.GetHeader("Authorization"))
-			if err != nil {
-				return nil, apperr.ErrUnauthorized
-			}
 
-			dateHeader := c.GetHeader("X-Date")
-			timestamp, err := time.Parse(time.RFC3339, dateHeader)
-			if err != nil || time.Since(timestamp).Abs() > 15*time.Minute {
-				return nil, apperr.ErrUnauthorized
-			}
-
-			authKey, err := store.GetAuthKey(c.Request.Context(), credential)
-			if err != nil {
-				if errors.Is(err, apperr.ErrNotFound) {
-					return nil, apperr.ErrUnauthorized
-				}
-				return nil, err
-			}
-
-			contentType := c.GetHeader("Content-Type")
-			isMultipart := strings.HasPrefix(contentType, "multipart/")
-			if isMultipart {
-				// skip body encryption if multipart (reading again issues)
-				expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, []byte{}, dateHeader, authKey.SecretKey)
-				if err != nil {
-					return nil, err
-				}
-
-				if !hmac.Equal([]byte(expected), []byte(signature)) {
-					return nil, apperr.ErrUnauthorized
-				}
-
-			} else {
-				body, err := io.ReadAll(c.Request.Body)
-				if err != nil {
-					return nil, err
-				}
-				c.Request.Body = io.NopCloser(bytes.NewReader(body))
-
-				expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, body, dateHeader, authKey.SecretKey)
-				if err != nil {
-					return nil, err
-				}
-
-				if !hmac.Equal([]byte(expected), []byte(signature)) {
-					return nil, apperr.ErrUnauthorized
-				}
-			}
-
-			c.Set("user_id", authKey.UserId)
-
-			return f(c, req)
+		credential, signature, err := parseAuthHeader(c.GetHeader("Authorization"))
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		}
+
+		dateHeader := c.GetHeader("X-Date")
+		timestamp, err := time.Parse(time.RFC3339, dateHeader)
+		if err != nil || time.Since(timestamp).Abs() > 15*time.Minute {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		}
+
+		authKey, err := store.GetAuthKey(c.Request.Context(), credential)
+		if err != nil {
+			if errors.Is(err, apperr.ErrNotFound) {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			}
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		body, err := io.ReadAll(c.Request.Body)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+		c.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+		expected, err := signing.Sign(c.Request.Method, c.Request.URL.Path, body, dateHeader, authKey.SecretKey)
+		if err != nil {
+			c.AbortWithStatus(http.StatusInternalServerError)
+			return
+		}
+
+		if !hmac.Equal([]byte(expected), []byte(signature)) {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		}
+
+		c.Set("user_id", authKey.UserId)
+		c.Next()
 	}
 }
 
@@ -104,9 +91,9 @@ func parseAuthHeader(header string) (credential, signature string, err error) {
 	return credential, signature, nil
 }
 
-func isPublic(operationID string) bool {
-	switch operationID {
-	case "GetHealth":
+func isPublic(path string) bool {
+	switch path {
+	case "/health":
 		return true
 	default:
 		return false
