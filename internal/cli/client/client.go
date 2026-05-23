@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"time"
 
 	"oblak/internal/api"
@@ -24,10 +23,7 @@ func NewSignedClient(profile cliconfig.Profile) (*api.ClientWithResponses, error
 func signingEditor(authID, secretKey string) api.RequestEditorFn {
 	return func(ctx context.Context, req *http.Request) error {
 		var body []byte
-		contentType := req.Header.Get("Content-Type")
-		isMultipart := strings.HasPrefix(contentType, "multipart/")
-
-		if req.Body != nil && !isMultipart {
+		if req.Body != nil {
 			var err error
 			body, err = io.ReadAll(req.Body)
 			if err != nil {
