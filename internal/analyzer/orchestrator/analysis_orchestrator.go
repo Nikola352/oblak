@@ -111,13 +111,13 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	if err != nil {
 		return FAILURE, errors.New("[DETONATION] Error running detonation")
 	}
-	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/res")
+	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikola-velemir/res")
 	if err != nil {
 		return FAILURE, err
 	}
 
 	log.Println("[ORCH] Asking LLM for log verdict")
-	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikola-velemir/res")
 	if err != nil {
 		return FAILURE, err
 	}

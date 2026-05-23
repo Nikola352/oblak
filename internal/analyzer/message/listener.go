@@ -22,9 +22,10 @@ import (
 )
 
 type ListenerDependencies struct {
-	FileStore     *orchestrator2.FileStore
-	FunctionStore *function.Store
-	Orchestrator  *orchestrator2.AnalysisOrchestrator
+	BucketRegistry *filestore.BucketRegistry
+	FileStore      *orchestrator2.FileStore
+	FunctionStore  *function.Store
+	Orchestrator   *orchestrator2.AnalysisOrchestrator
 }
 
 func StartListener(ctx context.Context) error {
@@ -102,7 +103,7 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 	if err != nil {
 		return err
 	}
-	err = deps.FileStore.Move(ctx, fileName, string(filestore.FunctionsBucket))
+	err = deps.FileStore.Move(ctx, fileName, deps.BucketRegistry.Name(filestore.FunctionsBucket))
 
 	return err
 }
@@ -127,10 +128,11 @@ func onLand(id uuid.UUID, ctx context.Context, store *function.Store) error {
 }
 
 func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
+	bucketRegistry := filestore.NewBucketRegistry()
 	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
-	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep")
 	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
-	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
+	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikola-velemir/faks/rbs/oblak/.venv/bin/pip-audit")
 
 	gvisorBox, err := dast.NewGVisorBox()
 	if err != nil {
@@ -138,7 +140,7 @@ func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
 	}
 
 	const minioEndpoint = "localhost:9000"
-	fileStore := orchestrator2.NewFileStore(minioEndpoint, "minioadmin", "minioadmin", string(filestore.QuarantineBucket))
+	fileStore := orchestrator2.NewFileStore(minioEndpoint, "minioadmin", "minioadmin", bucketRegistry.Name(filestore.QuarantineBucket))
 
 	db, err := database.Connect(ctx, "postgres://postgres:postgres@localhost:5433/oblak")
 	if err != nil {
@@ -150,8 +152,9 @@ func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
 	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor, fileStore)
 
 	return &ListenerDependencies{
-		Orchestrator:  orchestrator,
-		FunctionStore: functionStore,
-		FileStore:     fileStore,
+		Orchestrator:   orchestrator,
+		FunctionStore:  functionStore,
+		FileStore:      fileStore,
+		BucketRegistry: bucketRegistry,
 	}, nil
 }

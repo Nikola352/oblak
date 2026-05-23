@@ -21,16 +21,7 @@ func StartPublisher() error {
 	if err != nil {
 		return fmt.Errorf("failed to create subscriber: %w", err)
 	}
-	id, err := uuid.Parse("dde950d8-0437-4a8a-98cf-70a28096c43b")
-	if err != nil {
-		panic(err)
-	}
-	funcMessage := message2.FunctionMessage{
-		Path:       "clean.tar.gz",
-		Bucket:     "quarantine",
-		Status:     function.StatusQuarantined,
-		FunctionId: id,
-	}
+	funcMessage := createMessage()
 	payloadBytes, err := json.Marshal(funcMessage)
 	if err != nil {
 		return fmt.Errorf("failed to marshal function message struct: %w", err)
@@ -64,4 +55,18 @@ func publisherConfig(amqpURI, exchangeName string) amqp.Config {
 
 		TopologyBuilder: &amqp.DefaultTopologyBuilder{},
 	}
+}
+
+func createMessage() message2.FunctionMessage {
+	id, err := uuid.Parse("dde950d8-0437-4a8a-98cf-70a28096c43b")
+	if err != nil {
+		panic(err)
+	}
+	return message2.FunctionMessage{
+		Path:       "clean_dependent.tar.gz",
+		Bucket:     "quarantine",
+		Status:     function.StatusQuarantined,
+		FunctionId: id,
+	}
+
 }
