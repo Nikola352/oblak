@@ -26,9 +26,12 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      # Forces the browser to stay on localhost when redirecting
+      MINIO_BROWSER_REDIRECT_URL: "http://localhost:9001"
     volumes:
       - minio-data:/data
-    command: server /data --console-address ":9001"
+    # Added --address ":9000" to be explicit
+    command: server /data --address ":9000" --console-address ":9001"
   mq:
     image: rabbitmq:4.0-management
     container_name: rabbitmq
@@ -46,7 +49,26 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  clamav:
+
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    ports:
+      - "3310:3310" # Expose for your Go app
+    environment:
+        # These environment variables tell the official ClamAV image to enable TCP
+        - TCPSocket=3310
+        - TCPAddr=0.0.0.0
+
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+          - "11434:11434"
 volumes:
   postgres-data:
   minio-data:
   rabbitmq-data:
+  ollama_data:
