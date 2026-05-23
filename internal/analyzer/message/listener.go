@@ -12,6 +12,7 @@ import (
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
 	"oblak/internal/analyzer/sast"
 	"oblak/internal/server/database"
+	"oblak/internal/server/filestore"
 	"oblak/internal/server/function"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -32,6 +33,11 @@ func StartListener(ctx context.Context) error {
 	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
 	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
 	gvisorBox, err := dast.NewGVisorBox()
+	endpoint := "localhost:9000"
+	accessKey := "minioadmin"
+	secretKey := "minioadmin"
+
+	fileStore := orchestrator2.NewFileStore(endpoint, accessKey, secretKey, string(filestore.QuarantineBucket))
 
 	db, err := database.Connect(context.Background(), "postgres://postgres:postgres@localhost:5433/oblak")
 	var functionStore = function.NewStore(db)
@@ -41,7 +47,7 @@ func StartListener(ctx context.Context) error {
 	if err != nil {
 		panic(err)
 	}
-	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor)
+	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor, fileStore)
 
 	sub, err := amqp.NewSubscriber(cfg, watermill.NewStdLogger(false, false))
 	if err != nil {
@@ -64,7 +70,7 @@ func StartListener(ctx context.Context) error {
 				}
 				log.Printf("Received message: %s", msg.UUID)
 				msg.Ack()
-				err := processMessage(ctx, msg, orchestrator, functionStore)
+				err := processMessage(ctx, msg, orchestrator, functionStore, fileStore)
 				if err != nil {
 					panic(err)
 				}
@@ -81,7 +87,7 @@ func StartListener(ctx context.Context) error {
 	}()
 	return nil
 }
-func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store) error {
+func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2.AnalysisOrchestrator, functionStore *function.Store, fileStore *orchestrator2.FileStore) error {
 	log.Println("Message received from queue, processing payload!")
 	payload, err := unmarshalMessage(msg)
 	if err != nil {
@@ -98,14 +104,18 @@ func processMessage(ctx context.Context, msg *message.Message, ao *orchestrator2
 		return err
 	}
 
-	return updateFunctionStatus(payload.FunctionId, verdict, ctx, functionStore)
+	err = updateFunctionStatus(payload.FunctionId, verdict, ctx, functionStore)
+	if err != nil {
+		return err
+	}
+	err = fileStore.Move(ctx, fileName, string(filestore.FunctionsBucket))
 
+	return err
 }
 func unmarshalMessage(msg *message.Message) (*FunctionMessage, error) {
 	var msgData FunctionMessage
 	if err := json.Unmarshal(msg.Payload, &msgData); err != nil {
 		log.Printf("[QUEUE ERROR] Failed parsing JSON payload payload structures: %v", err)
-		// Returning an error here tells Watermill to Nack/Retry the message
 		return nil, fmt.Errorf("malformed function message metadata format: %w", err)
 	}
 	return &msgData, nil

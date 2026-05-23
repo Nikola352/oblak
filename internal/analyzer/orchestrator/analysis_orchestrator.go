@@ -10,14 +10,13 @@ import (
 	"oblak/internal/analyzer/llm"
 	"oblak/internal/analyzer/sanitizer"
 	"oblak/internal/analyzer/sast"
-	"oblak/internal/server/filestore"
 	"os"
 )
 
 type AnalysisOrchestrator struct {
 	sanitizer         sanitizer.CodeSanitizer
 	antivirus         av.Antivirus
-	fileLoader        *FileLoader
+	filesStore        *FileStore
 	sastAnalyzer      sast.StaticAnalyzer
 	llmJudge          llm.JudgeLLM
 	detonationBox     dast.DetonationBox
@@ -25,17 +24,13 @@ type AnalysisOrchestrator struct {
 	dependencyAuditor audit.DependencyAuditor
 }
 
-func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox, auditor audit.DependencyAuditor) *AnalysisOrchestrator {
-	endpoint := "localhost:9000"
-	accessKey := "minioadmin"
-	secretKey := "minioadmin"
-	fileloader := NewFileLoader(endpoint, accessKey, secretKey, string(filestore.QuarantineBucket))
+func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnalyzer, box dast.DetonationBox, auditor audit.DependencyAuditor, fileStore *FileStore) *AnalysisOrchestrator {
 
 	return &AnalysisOrchestrator{
 		sanitizer:         sanitizer.CodeSanitizer{},
 		antivirus:         av,
 		detonationBox:     box,
-		fileLoader:        fileloader,
+		filesStore:        fileStore,
 		sastAnalyzer:      analyzer,
 		llmJudge:          llm,
 		unzipper:          NewUnzipper(-1),
@@ -48,7 +43,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	log.Printf("Processing file from queue: %s", fileName)
 
 	// 2. Download from MinIO to /tmp/quarantine/
-	localPath, err := ao.fileLoader.Download(ctx, fileName)
+	localPath, err := ao.filesStore.Download(ctx, fileName)
 	if err != nil {
 		log.Printf("Error downloading file: %v", err)
 		return FAILURE, err // Returning an error tells Watermill to Nack/Retry
