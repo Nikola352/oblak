@@ -18,18 +18,29 @@ func NewEnvironmentPrepareRunner(filestore *minio.Client) EnvironmentPrepareRunn
 	return EnvironmentPrepareRunner{filestore}
 }
 
-func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) error {
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
+	var pendingCleanups []func() error
+	defer func() {
+		if err != nil {
+			for _, c := range pendingCleanups {
+				_ = c()
+			}
+		}
+	}()
+
 	codeBucket := filestore.NewBucketRegistry().Name(filestore.FunctionsBucket)
 	archiveDrive, err := ArchiveDrive(ctx, ep.filestore, codeBucket, codeObjectName)
 	if err != nil {
 		return fmt.Errorf("failed to prepare code drive: %w", err)
 	}
+	pendingCleanups = append(pendingCleanups, archiveDrive.Cleanup)
 
 	drivesBucket := filestore.NewBucketRegistry().Name(filestore.DrivesBucket)
 	depsDrive, err := MinioUploadDrive(ep.filestore, drivesBucket, depsObjectName)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deps drive: %w", err)
 	}
+	pendingCleanups = append(pendingCleanups, depsDrive.Cleanup)
 
 	drives := []DriveMount{RootDrive(), archiveDrive, depsDrive}
 
@@ -37,6 +48,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 	if err != nil {
 		return fmt.Errorf("failed to start build machine: %w", err)
 	}
+	pendingCleanups = nil
 	defer m.CleanUpDrives()
 
 	log.Printf("Log available at: %s\n", m.LogPath)
@@ -62,7 +74,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 		}
 		log.Println(msg) // TODO: stream outputs to minio
 		if msg.Type == agentproto.TypeDone || msg.Type == agentproto.TypeError {
-			isSuccessful = *msg.ExitCode == 0
+			isSuccessful = msg.Type == agentproto.TypeDone && *msg.ExitCode == 0
 			break
 		}
 	}
