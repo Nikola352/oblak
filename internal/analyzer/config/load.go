@@ -43,12 +43,12 @@ func Load() {
 	)
 
 	// 4. Host System Security Application Binaries Scopes
-	flag.StringVar(&Cfg.AuditBinaryPath, "pip-audit-path",
-		GetEnv("PIP_AUDIT_PATH", "/home/nikola-velemir/faks/rbs/oblak/.venv/bin/pip-audit"),
+	flag.StringVar(&Cfg.AuditBinaryPath, "auditor-path",
+		GetEnv("AUDITOR_PATH", "/home/nikola-velemir/faks/rbs/oblak/.venv/bin/pip-audit"),
 		"Absolute host execution system path pointing toward the pip-audit binary executable",
 	)
-	flag.StringVar(&Cfg.SastBinaryPath, "semgrep-path",
-		GetEnv("SEMGREP_PATH", "/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep"),
+	flag.StringVar(&Cfg.SastBinaryPath, "sast-path",
+		GetEnv("SAST_PATH", "/home/nikola-velemir/faks/rbs/oblak/.venv/bin/semgrep"),
 		"Absolute host execution system path pointing toward the Semgrep scanning core engine",
 	)
 
