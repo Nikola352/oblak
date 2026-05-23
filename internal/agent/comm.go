@@ -34,11 +34,16 @@ func ListenForCommands() error {
 	switch msg.Type {
 	case agentproto.TypeExec:
 		WriteLog("Starting execution...")
-		if err = ExecuteCode(conn); err != nil {
+		job := ExecJob{}
+		if err = job.Run(conn); err != nil {
 			WriteErr("execution failed", err)
 		}
 	case agentproto.TypeBuild:
-		//...
+		WriteLog("Starting environment build...")
+		job := BuildJob{}
+		if err = job.Run(conn); err != nil {
+			WriteErr("environment build failed", err)
+		}
 	}
 
 	// Wait for host to close the connection before shutting down.
