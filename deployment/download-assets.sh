@@ -20,10 +20,10 @@ echo "Using Firecracker CI version: $CI_VERSION"
 KERNEL_KEY="firecracker-ci/${CI_VERSION}/${ARCH}/vmlinux-${KERNEL_VERSION}"
 KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/${KERNEL_KEY}"
 
-mkdir -p ./deployment/firecracker
+mkdir -p ./firecracker
 
 echo "Downloading kernel vmlinux-${KERNEL_VERSION}..."
-if wget -O "./deployment/firecracker/vmlinux-${KERNEL_VERSION}" "$KERNEL_URL"; then
+if wget -O "./firecracker/vmlinux-${KERNEL_VERSION}" "$KERNEL_URL"; then
     echo "✓ Kernel downloaded: vmlinux-${KERNEL_VERSION}"
 else
     echo "✗ Failed to download kernel. The version ${KERNEL_VERSION} may not be available for ${ARCH} in CI version ${CI_VERSION}"
@@ -35,14 +35,14 @@ ROOTFS_KEY="firecracker-ci/${CI_VERSION}/${ARCH}/ubuntu-${UBUNTU_VERSION}.squash
 ROOTFS_URL="https://s3.amazonaws.com/spec.ccfc.min/${ROOTFS_KEY}"
 
 echo "Downloading Ubuntu ${UBUNTU_VERSION} squashfs rootfs..."
-if wget -O "./deployment/firecracker/ubuntu-${UBUNTU_VERSION}.squashfs.upstream" "$ROOTFS_URL"; then
+if wget -O "./firecracker/ubuntu-${UBUNTU_VERSION}.squashfs.upstream" "$ROOTFS_URL"; then
     echo "✓ Rootfs downloaded: ubuntu-${UBUNTU_VERSION}.squashfs.upstream"
 else
     echo "✗ Failed to download Ubuntu ${UBUNTU_VERSION} rootfs for ${ARCH}"
     exit 1
 fi
 
-cd ./deployment/firecracker
+cd ./firecracker
 
 # Repack squashfs
 echo "Repacking squashfs..."

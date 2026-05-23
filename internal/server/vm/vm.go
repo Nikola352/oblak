@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
@@ -28,9 +29,10 @@ type MicroVM struct {
 	controlPath string
 	logFile     *os.File
 	machine     *firecracker.Machine
+	drives      []DriveMount
 }
 
-func StartMachine(ctx context.Context) (*MicroVM, error) {
+func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 	id := uuid.New().String()
 	controlPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
 	vsockPath := fmt.Sprintf("/tmp/fc-vsock-%s.sock", id)
@@ -41,6 +43,13 @@ func StartMachine(ctx context.Context) (*MicroVM, error) {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("failed to remove socket %s: %w", p, err)
 		}
+	}
+
+	driveConfigs := make([]models.Drive, len(drives))
+	for i, mount := range drives {
+		cfg := mount.Config
+		cfg.DriveID = firecracker.String(fmt.Sprintf("drive%d", i))
+		driveConfigs[i] = cfg
 	}
 
 	logFile, err := os.Create(logPath)
@@ -61,17 +70,18 @@ func StartMachine(ctx context.Context) (*MicroVM, error) {
 				CID:  cid,
 			},
 		},
-		Drives: []models.Drive{
-			{
-				DriveID:      firecracker.String("rootfs"),
-				PathOnHost:   firecracker.String("./deployment/firecracker/rootfs.squashfs"),
-				IsRootDevice: firecracker.Bool(true),
-				IsReadOnly:   firecracker.Bool(true),
-			},
-		},
+		Drives: driveConfigs,
 		MachineCfg: models.MachineConfiguration{
 			MemSizeMib: firecracker.Int64(512),
 			VcpuCount:  firecracker.Int64(1),
+		},
+		NetworkInterfaces: firecracker.NetworkInterfaces{
+			{
+				CNIConfiguration: &firecracker.CNIConfiguration{
+					NetworkName: "oblak",
+					IfName:      "eth0",
+				},
+			},
 		},
 	}
 
@@ -101,6 +111,7 @@ func StartMachine(ctx context.Context) (*MicroVM, error) {
 		controlPath: controlPath,
 		logFile:     logFile,
 		machine:     machine,
+		drives:      drives,
 	}, nil
 }
 
@@ -146,4 +157,16 @@ func (vm *MicroVM) Stop() error {
 	_ = os.Remove(vm.vsockPath)
 	_ = os.Remove(vm.controlPath)
 	return err
+}
+
+func (vm *MicroVM) CleanUpDrives() {
+	for _, drive := range vm.drives {
+		if drive.Cleanup == nil {
+			continue
+		}
+		err := drive.Cleanup()
+		if err != nil {
+			log.Printf("error on drive cleanup: %v\n", err)
+		}
+	}
 }
