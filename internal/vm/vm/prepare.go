@@ -89,7 +89,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 			return fmt.Errorf("failed to upload prepared env to minio: %v\n", err)
 		}
 	} else {
-		return fmt.Errorf("failed to install dependencies")
+		return &UserError{reason: "failed to install dependencies (non-zero exit code)"}
 	}
 
 	return nil

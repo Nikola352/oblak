@@ -7,9 +7,9 @@ import (
 	"log"
 	"mime/multipart"
 	"oblak/internal/api"
+	"oblak/internal/function"
 	"oblak/internal/server/events"
 	"oblak/internal/server/filestore"
-	"oblak/internal/server/function"
 	"time"
 
 	"github.com/gin-gonic/gin"

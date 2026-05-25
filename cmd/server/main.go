@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"log"
+	"oblak/internal/function"
 	"oblak/internal/server/events"
 	"oblak/internal/server/extractor"
-	"oblak/internal/server/function"
 	"oblak/internal/server/httpserver"
 
 	"github.com/gin-gonic/gin"

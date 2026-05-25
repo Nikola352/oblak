@@ -11,9 +11,9 @@ import (
 	"oblak/internal/analyzer/llm"
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
 	"oblak/internal/analyzer/sast"
+	"oblak/internal/function"
 	"oblak/internal/server/database"
 	"oblak/internal/server/filestore"
-	"oblak/internal/server/function"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
@@ -115,7 +115,7 @@ func unmarshalMessage(msg *message.Message) (*FunctionMessage, error) {
 	return &msgData, nil
 }
 func updateFunctionStatus(id uuid.UUID, verdict orchestrator2.AnalysisVerdict, ctx context.Context, store *function.Store) error {
-	var status = function.StatusReady
+	var status = function.StatusVerified
 	if verdict == orchestrator2.MALICIOUS {
 		status = function.StatusDetected
 	}

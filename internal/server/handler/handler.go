@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"oblak/internal/function"
 	"oblak/internal/server/events"
-	"oblak/internal/server/function"
 
 	"github.com/minio/minio-go/v7"
 )

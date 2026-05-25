@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"oblak/internal/function"
 	"oblak/internal/server/database"
 	"oblak/internal/server/filestore"
 	"oblak/internal/util"
@@ -40,8 +41,7 @@ func main() {
 	}
 
 	buildService := service.NewEnvironmentPrepareService(
-		db,
-		minioClient,
+		function.NewStore(db),
 		vm.NewEnvironmentPrepareRunner(minioClient),
 	)
 	executeService := service.NewExecutionService(
