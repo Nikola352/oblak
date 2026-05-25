@@ -14,8 +14,8 @@ type ExecutionRunner struct {
 	filestore *minio.Client
 }
 
-func NewExecutionRunner(filestore *minio.Client) ExecutionRunner {
-	return ExecutionRunner{filestore}
+func NewExecutionRunner(filestore *minio.Client) *ExecutionRunner {
+	return &ExecutionRunner{filestore}
 }
 
 func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName string) (err error) {

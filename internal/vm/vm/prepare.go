@@ -14,8 +14,8 @@ type EnvironmentPrepareRunner struct {
 	filestore *minio.Client
 }
 
-func NewEnvironmentPrepareRunner(filestore *minio.Client) EnvironmentPrepareRunner {
-	return EnvironmentPrepareRunner{filestore}
+func NewEnvironmentPrepareRunner(filestore *minio.Client) *EnvironmentPrepareRunner {
+	return &EnvironmentPrepareRunner{filestore}
 }
 
 func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
