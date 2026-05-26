@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	message2 "oblak/internal/analyzer/message"
-	"oblak/internal/server/function"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
@@ -65,7 +64,6 @@ func createMessage() message2.FunctionMessage {
 	return message2.FunctionMessage{
 		Path:       "clean_dependent.tar.gz",
 		Bucket:     "quarantine",
-		Status:     function.StatusQuarantined,
 		FunctionId: id,
 	}
 

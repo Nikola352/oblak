@@ -68,9 +68,8 @@ func StartListener(ctx context.Context) error {
 				msg.Ack()
 				err := processMessage(ctx, msg, deps)
 				if err != nil {
-					panic(err)
+					log.Println(err)
 				}
-				return
 			case <-ctx.Done():
 				log.Printf("Shutting down")
 				err := sub.Close()
@@ -94,7 +93,7 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 		return err
 	}
 	fileName := payload.Path
-	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName)
+	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName, payload.FunctionId)
 
 	if err != nil {
 		return err
