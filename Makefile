@@ -1,20 +1,53 @@
-BIN_DIR := ./bin
-SERVER  := $(BIN_DIR)/server
-ROOTFS  := ./deployment/firecracker/rootfs.squashfs
+BIN_DIR  := ./bin
+SERVER   := $(BIN_DIR)/server
+VM       := $(BIN_DIR)/vm
+ANALYZER := $(BIN_DIR)/analyzer
+ROOTFS   := ./deployment/firecracker/rootfs.squashfs
 
-.PHONY: build-server run-server rootfs run clean
+AGENT_SOURCES := deployment/build-rootfs.sh $(shell find cmd/agent internal/agent internal/agentproto -name '*.go')
+
+.PHONY: build-server build-vm build-analyzer build \
+        run-server run-vm run-analyzer \
+        run clean
+
+# --- build targets ---
 
 build-server:
 	go build -o $(SERVER) ./cmd/server
 
-run-server: build-server
-	sudo $(SERVER)
+build-vm:
+	go build -o $(VM) ./cmd/vm
 
-rootfs:
+build-analyzer:
+	go build -o $(ANALYZER) ./cmd/analyzer
+
+build: build-server build-vm build-analyzer
+
+# --- rootfs (rebuilt only when agent sources change) ---
+
+$(ROOTFS): $(AGENT_SOURCES)
 	./deployment/build-rootfs.sh
 
-run: rootfs build-server
-	sudo $(SERVER)
+# --- run targets (separate terminals) ---
+
+run-server: build-server
+	$(SERVER)
+
+run-vm: build-vm $(ROOTFS)
+	sudo $(VM)
+
+run-analyzer: build-analyzer
+	$(ANALYZER)
+
+# --- combined launcher (prefixed output, single terminal) ---
+
+run: build $(ROOTFS)
+	@( $(SERVER) 2>&1 | sed 's/^/[server]   /' ) & \
+	 ( sudo $(VM) 2>&1 | sed 's/^/[vm]       /' ) & \
+	 ( $(ANALYZER) 2>&1 | sed 's/^/[analyzer] /' ) & \
+	 wait
+
+# --- misc ---
 
 clean:
-	rm -f $(SERVER) $(ROOTFS)
+	rm -f $(SERVER) $(VM) $(ANALYZER) $(ROOTFS)

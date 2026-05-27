@@ -10,15 +10,15 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
-type ExecutionRunner struct {
+type EnvironmentPrepareRunner struct {
 	filestore *minio.Client
 }
 
-func NewExecutionRunner(filestore *minio.Client) ExecutionRunner {
-	return ExecutionRunner{filestore}
+func NewEnvironmentPrepareRunner(filestore *minio.Client) *EnvironmentPrepareRunner {
+	return &EnvironmentPrepareRunner{filestore}
 }
 
-func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -29,26 +29,20 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	}()
 
 	codeBucket := filestore.NewBucketRegistry().Name(filestore.FunctionsBucket)
-	codeDrive, err := ArchiveDrive(ctx, e.filestore, codeBucket, codeObjectName)
+	archiveDrive, err := ArchiveDrive(ctx, ep.filestore, codeBucket, codeObjectName)
 	if err != nil {
 		return fmt.Errorf("failed to prepare code drive: %w", err)
 	}
-	pendingCleanups = append(pendingCleanups, codeDrive.Cleanup)
+	pendingCleanups = append(pendingCleanups, archiveDrive.Cleanup)
 
 	drivesBucket := filestore.NewBucketRegistry().Name(filestore.DrivesBucket)
-	depsDrive, err := MinioDrive(ctx, e.filestore, drivesBucket, depsObjectName)
+	depsDrive, err := MinioUploadDrive(ep.filestore, drivesBucket, depsObjectName)
 	if err != nil {
 		return fmt.Errorf("failed to prepare deps drive: %w", err)
 	}
 	pendingCleanups = append(pendingCleanups, depsDrive.Cleanup)
 
-	tmpDrive, err := EphemeralDrive()
-	if err != nil {
-		return fmt.Errorf("failed to prepare tmp drive: %w", err)
-	}
-	pendingCleanups = append(pendingCleanups, tmpDrive.Cleanup)
-
-	drives := []DriveMount{RootDrive(), codeDrive, depsDrive, tmpDrive}
+	drives := []DriveMount{RootDrive(), archiveDrive, depsDrive}
 
 	m, err := StartMachine(ctx, drives)
 	if err != nil {
@@ -68,10 +62,11 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 		_ = conn.Close()
 	}(conn)
 
-	if err = conn.Send(agentproto.Exec()); err != nil {
+	if err = conn.Send(agentproto.Build()); err != nil {
 		return err
 	}
 
+	var isSuccessful = false
 	for {
 		msg, err := conn.Receive()
 		if err != nil {
@@ -79,12 +74,22 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 		}
 		log.Println(msg) // TODO: stream outputs to minio
 		if msg.Type == agentproto.TypeDone || msg.Type == agentproto.TypeError {
+			isSuccessful = msg.Type == agentproto.TypeDone && *msg.ExitCode == 0
 			break
 		}
 	}
 
 	if err = m.Stop(); err != nil {
 		log.Printf("failed to stop vm %s: %v", m.Id, err)
+	}
+
+	if isSuccessful {
+		err = depsDrive.Save()
+		if err != nil {
+			return fmt.Errorf("failed to upload prepared env to minio: %v\n", err)
+		}
+	} else {
+		return &UserError{reason: "failed to install dependencies (non-zero exit code)"}
 	}
 
 	return nil

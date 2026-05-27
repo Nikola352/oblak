@@ -3,8 +3,8 @@ package extractor
 import (
 	"context"
 	"log"
+	"oblak/internal/function"
 	"oblak/internal/server/events"
-	"oblak/internal/server/function"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"

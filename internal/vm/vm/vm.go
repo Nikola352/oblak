@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -22,14 +23,16 @@ const (
 )
 
 type MicroVM struct {
-	Id          string
-	Cid         uint32
-	LogPath     string
-	vsockPath   string
-	controlPath string
-	logFile     *os.File
-	machine     *firecracker.Machine
-	drives      []DriveMount
+	Id            string
+	Cid           uint32
+	LogPath       string
+	vsockPath     string
+	controlPath   string
+	logFile       *os.File
+	machine       *firecracker.Machine
+	drives        []DriveMount
+	cancelMachine context.CancelFunc
+	stopOnce      sync.Once
 }
 
 func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
@@ -85,34 +88,51 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 		},
 	}
 
+	machineCtx, machineCancel := context.WithCancel(context.Background())
+
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin("firecracker").
 		WithSocketPath(controlPath).
 		WithStdout(logFile).
 		WithStderr(logFile).
-		Build(ctx)
+		Build(machineCtx)
 
-	machine, err := firecracker.NewMachine(ctx, firecrackerCfg, firecracker.WithProcessRunner(cmd))
+	machine, err := firecracker.NewMachine(machineCtx, firecrackerCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
+		machineCancel()
 		_ = logFile.Close()
 		return nil, err
 	}
 
-	if err := machine.Start(ctx); err != nil {
+	if err := machine.Start(machineCtx); err != nil {
+		machineCancel()
 		_ = logFile.Close()
 		return nil, err
 	}
 
-	return &MicroVM{
-		Id:          id,
-		Cid:         cid,
-		LogPath:     logPath,
-		vsockPath:   vsockPath,
-		controlPath: controlPath,
-		logFile:     logFile,
-		machine:     machine,
-		drives:      drives,
-	}, nil
+	vm := &MicroVM{
+		Id:            id,
+		Cid:           cid,
+		LogPath:       logPath,
+		vsockPath:     vsockPath,
+		controlPath:   controlPath,
+		logFile:       logFile,
+		machine:       machine,
+		drives:        drives,
+		cancelMachine: machineCancel,
+	}
+
+	// Safety net: if the caller's context is cancelled before Stop() is called,
+	// run the full teardown so the VM doesn't run indefinitely.
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = vm.Stop()
+		case <-machineCtx.Done():
+		}
+	}()
+
+	return vm, nil
 }
 
 func (vm *MicroVM) Connect() (net.Conn, error) {
@@ -152,10 +172,19 @@ func (vm *MicroVM) Connect() (net.Conn, error) {
 }
 
 func (vm *MicroVM) Stop() error {
-	err := vm.machine.StopVMM()
-	_ = vm.logFile.Close()
-	_ = os.Remove(vm.vsockPath)
-	_ = os.Remove(vm.controlPath)
+	var err error
+	vm.stopOnce.Do(func() {
+		err = vm.machine.StopVMM()
+
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer waitCancel()
+		_ = vm.machine.Wait(waitCtx)
+		vm.cancelMachine()
+
+		_ = vm.logFile.Close()
+		_ = os.Remove(vm.vsockPath)
+		_ = os.Remove(vm.controlPath)
+	})
 	return err
 }
 
