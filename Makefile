@@ -4,7 +4,7 @@ VM       := $(BIN_DIR)/vm
 ANALYZER := $(BIN_DIR)/analyzer
 ROOTFS   := ./deployment/firecracker/rootfs.squashfs
 
-AGENT_SOURCES := deployment/build-rootfs.sh $(shell find cmd/agent internal -name '*.go')
+AGENT_SOURCES := deployment/build-rootfs.sh $(shell find cmd/agent internal/agent internal/agentproto -name '*.go')
 
 .PHONY: build-server build-vm build-analyzer build \
         run-server run-vm run-analyzer \
