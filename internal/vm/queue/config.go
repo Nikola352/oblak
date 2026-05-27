@@ -69,3 +69,23 @@ func ExecuteConsumerConfig(cfg config.Config) amqp.Config {
 		TopologyBuilder: &amqp.DefaultTopologyBuilder{},
 	}
 }
+
+func PublisherConfig(cfg config.Config) amqp.Config {
+	return amqp.Config{
+		Connection: amqp.ConnectionConfig{
+			AmqpURI: cfg.AmqpUri,
+		},
+		Marshaler: amqp.DefaultMarshaler{},
+		Exchange: amqp.ExchangeConfig{
+			GenerateName: amqp.GenerateExchangeNameConstant(cfg.AmqpVmExchangeName),
+			Type:         "direct",
+			Durable:      true,
+		},
+		Publish: amqp.PublishConfig{
+			GenerateRoutingKey: func(topic string) string {
+				return topic
+			},
+		},
+		TopologyBuilder: &amqp.DefaultTopologyBuilder{},
+	}
+}

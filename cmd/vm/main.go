@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"oblak/internal/function"
 	"oblak/internal/server/database"
@@ -11,12 +10,7 @@ import (
 	"oblak/internal/vm/queue"
 	"oblak/internal/vm/service"
 	"oblak/internal/vm/vm"
-	"time"
 
-	"github.com/ThreeDotsLabs/watermill"
-	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
-	"github.com/ThreeDotsLabs/watermill/message"
-	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"github.com/joho/godotenv"
 )
 
@@ -40,8 +34,9 @@ func main() {
 		log.Fatalf("minio: %v", err)
 	}
 
+	store := function.NewStore(db)
 	buildService := service.NewEnvironmentPrepareService(
-		function.NewStore(db),
+		store,
 		vm.NewEnvironmentPrepareRunner(minioClient),
 	)
 	executeService := service.NewExecutionService(
@@ -53,39 +48,11 @@ func main() {
 	buildHandler := queue.NewBuildHandler(buildService)
 	executeHandler := queue.NewExecuteHandler(executeService)
 
-	logger := watermill.NewStdLogger(true, false)
-
-	router, err := message.NewRouter(message.RouterConfig{}, logger)
+	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, store)
 	if err != nil {
-		log.Fatalf("router: %v", err)
+		log.Fatalf("router setup: %v", err)
 	}
-
-	router.AddMiddleware(
-		middleware.Retry{
-			MaxRetries:      3,
-			InitialInterval: 500 * time.Millisecond,
-			MaxInterval:     30 * time.Second,
-			Multiplier:      2,
-			Logger:          logger,
-		}.Middleware,
-		middleware.Recoverer,
-	)
-
-	for i := range cfg.MaxConcurrentBuilds {
-		sub, err := amqp.NewSubscriber(queue.PrepareEnvConsumerConfig(*cfg), logger)
-		if err != nil {
-			log.Fatalf("build subscriber: %v", err)
-		}
-		router.AddConsumerHandler(fmt.Sprintf("build-%d", i), cfg.BuildQueueName, sub, buildHandler.Handle)
-	}
-
-	for i := range cfg.MaxConcurrentExecutes {
-		sub, err := amqp.NewSubscriber(queue.ExecuteConsumerConfig(*cfg), logger)
-		if err != nil {
-			log.Fatalf("execute subscriber: %v", err)
-		}
-		router.AddConsumerHandler(fmt.Sprintf("execute-%d", i), cfg.ExecuteQueueName, sub, executeHandler.Handle)
-	}
+	defer func() { _ = router.Close() }()
 
 	if err := router.Run(ctx); err != nil {
 		log.Fatalf("router: %v", err)

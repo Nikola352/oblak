@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"oblak/internal/function"
 	"oblak/internal/vm/service"
 	"strings"
 
@@ -74,6 +75,29 @@ func (h *ExecuteHandler) Handle(msg *message.Message) error {
 		return err
 	}
 	return nil
+}
+
+// statusFailPublisher wraps a Publisher so that publishing to the DLQ also
+// marks the corresponding function as failed in the database.
+type statusFailPublisher struct {
+	base  message.Publisher
+	store *function.Store
+}
+
+func (p *statusFailPublisher) Publish(topic string, messages ...*message.Message) error {
+	for _, msg := range messages {
+		var m service.BuildMessage
+		if err := decodePayload(msg.Payload, &m); err == nil {
+			if dbErr := p.store.UpdateFunctionStatus(msg.Context(), m.FunctionId, function.StatusFailed); dbErr != nil {
+				log.Printf("dlq: failed to update status to failed: %v", dbErr)
+			}
+		}
+	}
+	return p.base.Publish(topic, messages...)
+}
+
+func (p *statusFailPublisher) Close() error {
+	return p.base.Close()
 }
 
 func decodePayload(payload []byte, dst any) error {

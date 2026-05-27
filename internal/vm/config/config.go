@@ -14,6 +14,7 @@ type Config struct {
 	AmqpUri               string
 	AmqpVmExchangeName    string
 	BuildQueueName        string
+	BuildDLQName          string
 	ExecuteQueueName      string
 	MaxConcurrentBuilds   int
 	MaxConcurrentExecutes int
@@ -30,6 +31,7 @@ func Load() *Config {
 		AmqpUri:               getEnv("AMQP_URI", "amqp://admin:admin@localhost:5672/"),
 		AmqpVmExchangeName:    getEnv("AMQP_VM_EXCHANGE_NAME", "vm"),
 		BuildQueueName:        getEnv("BUILD_QUEUE_NAME", "build"),
+		BuildDLQName:          getEnv("BUILD_DLQ_NAME", "build_dlq"),
 		ExecuteQueueName:      getEnv("EXECUTE_QUEUE_NAME", "execute"),
 		MaxConcurrentBuilds:   getEnvInt("MAX_CONCURRENT_BUILDS", 3),
 		MaxConcurrentExecutes: getEnvInt("MAX_CONCURRENT_EXECUTES", 20),
