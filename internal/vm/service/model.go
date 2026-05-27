@@ -9,7 +9,7 @@ type BuildMessage struct {
 }
 
 type ExecuteMessage struct {
-	ExecutionId            uuid.UUID `json:"execution_id"`
+	InvocationId           uuid.UUID `json:"invocation_id"`
 	CodeObjectName         string    `json:"code_object_name"`
 	DependenciesObjectName string    `json:"dependencies_object_name"`
 }

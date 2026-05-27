@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"oblak/internal/function"
+	"oblak/internal/invocation"
 	"oblak/internal/server/database"
 	"oblak/internal/server/filestore"
 	"oblak/internal/util"
@@ -34,21 +35,22 @@ func main() {
 		log.Fatalf("minio: %v", err)
 	}
 
-	store := function.NewStore(db)
+	functionStore := function.NewStore(db)
+	invocationStore := invocation.NewStore(db)
+
 	buildService := service.NewEnvironmentPrepareService(
-		store,
+		functionStore,
 		vm.NewEnvironmentPrepareRunner(minioClient),
 	)
 	executeService := service.NewExecutionService(
-		db,
-		minioClient,
+		invocationStore,
 		vm.NewExecutionRunner(minioClient),
 	)
 
 	buildHandler := queue.NewBuildHandler(buildService)
 	executeHandler := queue.NewExecuteHandler(executeService)
 
-	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, store)
+	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, functionStore)
 	if err != nil {
 		log.Fatalf("router setup: %v", err)
 	}

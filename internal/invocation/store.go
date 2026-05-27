@@ -35,6 +35,18 @@ func (s *Store) CreateInvocation(ctx context.Context, functionId uuid.UUID, invo
 	return inv, nil
 }
 
+func (s *Store) UpdateInvocationStatus(ctx context.Context, invocationId uuid.UUID, status Status) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE invocations
+		SET status = $1
+		WHERE invocation_id = $2
+	`, status, invocationId)
+	if err != nil {
+		return fmt.Errorf("update invocation status: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) UpdateInvocationStatusIf(ctx context.Context, invocationId uuid.UUID, from, to Status) (bool, error) {
 	result, err := s.db.Exec(ctx, `
 		UPDATE invocations
