@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"oblak/internal/invocation"
 	"oblak/internal/vm/vm"
@@ -31,14 +32,16 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 		return nil // ack
 	}
 
-	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName); err != nil {
+	logsObjectName := fmt.Sprintf("%s.log", msg.InvocationId)
+
+	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName); err != nil {
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
 			log.Printf("failed to reset status after execute error: %v", dbErr)
 		}
 		return err
 	}
 
-	if err = s.invocationStore.UpdateInvocationStatusAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, time.Now()); err != nil {
+	if err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, logsObjectName, time.Now()); err != nil {
 		log.Printf("failed to reset status after execute error: %v", err)
 	}
 

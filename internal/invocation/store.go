@@ -24,6 +24,7 @@ func (s *Store) CreateInvocation(ctx context.Context, functionId uuid.UUID, invo
 		Status:         StatusPending,
 		InvocationTime: &invocationTime,
 		EndTime:        nil,
+		LogPath:        nil,
 	}
 	_, err := s.db.Exec(ctx, `
 		INSERT INTO invocations (invocation_id, function_id, status, invocation_time, end_time)
@@ -59,12 +60,12 @@ func (s *Store) UpdateInvocationStatusIf(ctx context.Context, invocationId uuid.
 	return result.RowsAffected() == 1, nil
 }
 
-func (s *Store) UpdateInvocationStatusAndEndTime(ctx context.Context, invocationId uuid.UUID, status Status, endTime time.Time) error {
+func (s *Store) UpdateInvocationStatusAndLogPathAndEndTime(ctx context.Context, invocationId uuid.UUID, status Status, logPath string, endTime time.Time) error {
 	_, err := s.db.Exec(ctx, `
 		UPDATE invocations
-		SET status = $1, end_time = $2
-		WHERE invocation_id = $3
-	`, status, endTime, invocationId)
+		SET status = $1, log_path = $2, end_time = $3
+		WHERE invocation_id = $4
+	`, status, logPath, endTime, invocationId)
 	if err != nil {
 		return fmt.Errorf("update invocation status and end time: %w", err)
 	}

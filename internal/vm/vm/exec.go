@@ -18,7 +18,7 @@ func NewExecutionRunner(filestore *minio.Client) *ExecutionRunner {
 	return &ExecutionRunner{filestore}
 }
 
-func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
+func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
