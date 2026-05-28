@@ -59,8 +59,8 @@ func (s *Store) UpdateFunctionStatusIf(ctx context.Context, functionId uuid.UUID
 func (s *Store) UpdateFunctionStatusAndDrivePath(ctx context.Context, functionId uuid.UUID, status Status, drivePath string) error {
 	_, err := s.db.Exec(ctx, `
 		UPDATE functions 
-		SET status = $1
-		AND drive_path = $2
+		SET status = $1,
+		drive_path = $2
 		WHERE function_id = $3
 	`, status, drivePath, functionId)
 	if err != nil {
