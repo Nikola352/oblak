@@ -37,8 +37,8 @@ func Load() {
 	)
 
 	// 3. Relational Persistence Storage Configuration
-	flag.StringVar(&Cfg.DbConnectionString, "db-connection-string",
-		GetEnv("DB_CONNECTION_STRING", "postgres://postgres:postgres@localhost:5433/oblak"),
+	flag.StringVar(&Cfg.DbConnectionString, "database_url",
+		GetEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5433/oblak"),
 		"Target Data Warehouse Connection Access String Parameter URI",
 	)
 
@@ -66,7 +66,7 @@ func Load() {
 func validate() {
 	// Guard against unconfigured database runtimes
 	if Cfg.DbConnectionString == "" {
-		log.Fatal("[CONFIG CRITICAL] A non-empty db-connection-string / DB_CONNECTION_STRING parameter is strictly required to bootstrap execution context structures.")
+		log.Fatal("[CONFIG CRITICAL] A non-empty db-connection-string / DATABASE_URL parameter is strictly required to bootstrap execution context structures.")
 	}
 
 	// Verify local dependency binaries exist before launching listeners
