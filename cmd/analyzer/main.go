@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"log"
+	"oblak/internal/analyzer/config"
 	"oblak/internal/analyzer/message"
 	"os"
 	"os/signal"
@@ -13,6 +14,7 @@ import (
 )
 
 func main() {
+	config.Load()
 	const quarantinePath = "/tmp/quarantine"
 	if err := initializeQuarantineDirectory(quarantinePath); err != nil {
 		// If we can't write or clean /tmp, our pipeline is broken, so we panic/fail early.

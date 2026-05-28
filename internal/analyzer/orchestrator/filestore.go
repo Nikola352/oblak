@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -34,8 +35,8 @@ func NewFileStore(endpoint, accessKey, secretKey, bucketName string) *FileStore 
 	}
 }
 
-func (fl *FileStore) Download(ctx context.Context, fileName string) (string, error) {
-	localPath := "/tmp/quarantine/" + fileName
+func (fl *FileStore) Download(ctx context.Context, fileName string, functionId uuid.UUID) (string, error) {
+	localPath := "/tmp/quarantine/" + functionId.String() + "/" + fileName
 
 	err := fl.client.FGetObject(ctx, fl.bucketName, fileName, localPath, minio.GetObjectOptions{})
 	if err != nil {

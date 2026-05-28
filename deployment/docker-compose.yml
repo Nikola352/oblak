@@ -27,7 +27,7 @@ services:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
       # Forces the browser to stay on localhost when redirecting
-      MINIO_BROWSER_REDIRECT_URL: "http://localhost:9001"
+#      MINIO_BROWSER_REDIRECT_URL: "http://localhost:9001"
     volumes:
       - minio-data:/data
     # Added --address ":9000" to be explicit
@@ -59,14 +59,30 @@ services:
         # These environment variables tell the official ClamAV image to enable TCP
         - TCPSocket=3310
         - TCPAddr=0.0.0.0
-
+  python_sandbox:
+    image: python:3.11-alpine
+    container_name: gvisor_python_sandbox
+    # This replaces the --runtime=runsc flag completely!
+    runtime: runsc
+    profiles:
+      - tools-pull-only
   ollama:
-    container_name: ollama
     image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
-    ports:
-          - "11434:11434"
+    # Uses ollama's own binary to verify server status, avoiding missing binary issues
+    entrypoint: >
+      /bin/sh -c "
+      ollama serve & 
+      echo '[INIT] Waiting for Ollama engine to spin up...';
+      until ollama list >/dev/null 2>&1; do sleep 1; done;
+      echo '[INIT] Server ready! Pulling qwen2.5:3b...';
+      ollama pull qwen2.5:3b; 
+      echo '[INIT] Initialization complete!';
+      wait"
 volumes:
   postgres-data:
   minio-data:

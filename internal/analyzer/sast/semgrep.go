@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
+	"path/filepath"
 )
 
 // SemgrepOutput matches the simplified JSON structure from Semgrep CLI
@@ -19,8 +20,12 @@ func NewSemgrepAnalyzer(binaryPath string) *SemgrepAnalyzer {
 
 func (a SemgrepAnalyzer) Run(targetPath string) (*SemgrepOutput, error) {
 	//
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed resolving absolute engine route path: %w", err)
+	}
 	log.Println("[SEMGREP] Beginning static analysis")
-	cmd := exec.Command(a.binaryPath, "scan", "--json", "--config", "r/python", "--quiet", targetPath)
+	cmd := exec.Command(a.binaryPath, "scan", "--json", "--config", "r/python", "--quiet", absPath)
 	output, err := cmd.Output()
 	if err != nil {
 		// Semgrep returns exit code 1 if findings are found; we check output length instead

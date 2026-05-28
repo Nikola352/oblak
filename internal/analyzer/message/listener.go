@@ -7,6 +7,7 @@ import (
 	"log"
 	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/config"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
@@ -22,9 +23,10 @@ import (
 )
 
 type ListenerDependencies struct {
-	FileStore     *orchestrator2.FileStore
-	FunctionStore *function.Store
-	Orchestrator  *orchestrator2.AnalysisOrchestrator
+	BucketRegistry *filestore.BucketRegistry
+	FileStore      *orchestrator2.FileStore
+	FunctionStore  *function.Store
+	Orchestrator   *orchestrator2.AnalysisOrchestrator
 }
 
 func StartListener(ctx context.Context) error {
@@ -66,9 +68,8 @@ func StartListener(ctx context.Context) error {
 				msg.Ack()
 				err := processMessage(ctx, msg, deps)
 				if err != nil {
-					panic(err)
+					log.Println(err)
 				}
-				return
 			case <-ctx.Done():
 				log.Printf("Shutting down")
 				err := sub.Close()
@@ -92,7 +93,7 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 		return err
 	}
 	fileName := payload.Path
-	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName)
+	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName, payload.FunctionId)
 
 	if err != nil {
 		return err
@@ -102,7 +103,7 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 	if err != nil {
 		return err
 	}
-	err = deps.FileStore.Move(ctx, fileName, string(filestore.FunctionsBucket))
+	err = deps.FileStore.Move(ctx, fileName, deps.BucketRegistry.Name(filestore.FunctionsBucket))
 
 	return err
 }
@@ -127,20 +128,21 @@ func onLand(id uuid.UUID, ctx context.Context, store *function.Store) error {
 }
 
 func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
-	var myJudge llm.JudgeLLM = llm.NewQwenJudge("http://localhost:11434")
-	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/semgrep")
-	var clamAV av.Antivirus = av.NewClamAV("tcp://localhost:3310")
-	var auditor audit.DependencyAuditor = audit.NewPipAuditor("/home/nikolavelemir/faks/rbs/oblak/.venv/bin/pip-audit")
+	bucketRegistry := filestore.NewBucketRegistry()
+	var myJudge llm.JudgeLLM = llm.NewQwenJudge(config.Cfg.OllamaURL)
+	var semgrepAnalyzer sast.StaticAnalyzer = sast.NewSemgrepAnalyzer(config.Cfg.SastBinaryPath)
+
+	var clamAV av.Antivirus = av.NewClamAV(config.Cfg.AntivirusURL)
+	var auditor audit.DependencyAuditor = audit.NewPipAuditor(config.Cfg.AuditBinaryPath)
 
 	gvisorBox, err := dast.NewGVisorBox()
 	if err != nil {
 		return nil, fmt.Errorf("failed bootstrapping gvisor runtime container layout: %w", err)
 	}
 
-	const minioEndpoint = "localhost:9000"
-	fileStore := orchestrator2.NewFileStore(minioEndpoint, "minioadmin", "minioadmin", string(filestore.QuarantineBucket))
+	fileStore := orchestrator2.NewFileStore(config.Cfg.Minio.Endpoint, config.Cfg.Minio.AccessKey, config.Cfg.Minio.SecretKey, bucketRegistry.Name(filestore.QuarantineBucket))
 
-	db, err := database.Connect(ctx, "postgres://postgres:postgres@localhost:5433/oblak")
+	db, err := database.Connect(ctx, config.Cfg.DbConnectionString)
 	if err != nil {
 		return nil, fmt.Errorf("database connection initialization failed: %w", err)
 	}
@@ -150,8 +152,9 @@ func wireDependencies(ctx context.Context) (*ListenerDependencies, error) {
 	orchestrator := orchestrator2.NewOrchestrator(clamAV, myJudge, semgrepAnalyzer, gvisorBox, auditor, fileStore)
 
 	return &ListenerDependencies{
-		Orchestrator:  orchestrator,
-		FunctionStore: functionStore,
-		FileStore:     fileStore,
+		Orchestrator:   orchestrator,
+		FunctionStore:  functionStore,
+		FileStore:      fileStore,
+		BucketRegistry: bucketRegistry,
 	}, nil
 }

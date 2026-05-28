@@ -6,11 +6,14 @@ import (
 	"log"
 	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
+	"oblak/internal/analyzer/config"
 	"oblak/internal/analyzer/dast"
 	"oblak/internal/analyzer/llm"
 	"oblak/internal/analyzer/sanitizer"
 	"oblak/internal/analyzer/sast"
 	"os"
+
+	"github.com/google/uuid"
 )
 
 type AnalysisOrchestrator struct {
@@ -38,24 +41,25 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 	}
 }
 
-func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string) (AnalysisVerdict, error) {
-	// 1. Get the filename from the RabbitMQ message payload
-	log.Printf("Processing file from queue: %s", fileName)
+func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string, functionId uuid.UUID) (AnalysisVerdict, error) {
 
-	// 2. Download from MinIO to /tmp/quarantine/
-	localPath, err := ao.filesStore.Download(ctx, fileName)
+	log.Printf("Processing file from queue: %s", fileName)
+	functionIdString := functionId.String()
+
+	localPath, err := ao.filesStore.Download(ctx, fileName, functionId)
+
 	if err != nil {
 		log.Printf("Error downloading file: %v", err)
-		return FAILURE, err // Returning an error tells Watermill to Nack/Retry
+		return FAILURE, err
 	}
 
-	// Ensure we clean up the local file after the scan finishes
 	defer func(name string) {
 		err := os.Remove(name)
 		if err != nil {
 		}
 	}(localPath)
-	extractPath := "/tmp/quarantine/extracted"
+
+	extractPath := "/tmp/quarantine/" + functionIdString + "/extracted"
 
 	defer func(dir string) {
 		if err := os.RemoveAll(dir); err != nil {
@@ -111,21 +115,34 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	if err != nil {
 		return FAILURE, errors.New("[DETONATION] Error running detonation")
 	}
-	err = ao.detonationBox.WriteJSONReport(detonationResult, "/home/nikolavelemir/res")
+
+	jsonPath := config.Cfg.JSONReportOutputPath + "/" + functionIdString
+
+	defer func(dir string) {
+		if err := os.RemoveAll(dir); err != nil {
+			log.Printf("[CLEANUP] Warning: Failed to destroy reports directory %s: %v", dir, err)
+		} else {
+			log.Printf("[CLEANUP] Successfully purged reports workspace: %s", dir)
+		}
+	}(jsonPath)
+
+	err = ao.detonationBox.WriteJSONReport(detonationResult, jsonPath)
 	if err != nil {
 		return FAILURE, err
 	}
 
 	log.Println("[ORCH] Asking LLM for log verdict")
-	verdict, err := ao.llmJudge.AskForLogs(ctx, "/home/nikolavelemir/res")
+	verdict, err := ao.llmJudge.AskForLogs(ctx, jsonPath)
 	if err != nil {
 		return FAILURE, err
 	}
+
 	log.Println("LLM RESPONDED!")
 	log.Printf("%s %s %d", verdict.Verdict, verdict.Summary, verdict.ConfidenceScore)
 	if verdict.Verdict == "MALICIOUS" {
 		return MALICIOUS, nil
 	}
+
 	return SAFE, nil
 }
 

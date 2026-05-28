@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -143,15 +144,19 @@ func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionRes
 
 func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
 	log.Println("Writing JSON report")
+
+	// Extract the directory path from the output path and create it if it doesn't exist
+	dir := filepath.Dir(outputPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create directory path: %w", err)
+	}
+
 	f, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer func(f *os.File) {
-		err := f.Close()
-		if err != nil {
-
-		}
+		_ = f.Close() // Ignored the error explicitly or you can log it
 	}(f)
 
 	enc := json.NewEncoder(f)
