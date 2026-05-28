@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
@@ -21,16 +23,19 @@ const (
 )
 
 type MicroVM struct {
-	Id          string
-	Cid         uint32
-	LogPath     string
-	vsockPath   string
-	controlPath string
-	logFile     *os.File
-	machine     *firecracker.Machine
+	Id            string
+	Cid           uint32
+	LogPath       string
+	vsockPath     string
+	controlPath   string
+	logFile       *os.File
+	machine       *firecracker.Machine
+	drives        []DriveMount
+	cancelMachine context.CancelFunc
+	stopOnce      sync.Once
 }
 
-func StartMachine(ctx context.Context) (*MicroVM, error) {
+func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 	id := uuid.New().String()
 	controlPath := fmt.Sprintf("/tmp/fc-%s.sock", id)
 	vsockPath := fmt.Sprintf("/tmp/fc-vsock-%s.sock", id)
@@ -41,6 +46,13 @@ func StartMachine(ctx context.Context) (*MicroVM, error) {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return nil, fmt.Errorf("failed to remove socket %s: %w", p, err)
 		}
+	}
+
+	driveConfigs := make([]models.Drive, len(drives))
+	for i, mount := range drives {
+		cfg := mount.Config
+		cfg.DriveID = firecracker.String(fmt.Sprintf("drive%d", i))
+		driveConfigs[i] = cfg
 	}
 
 	logFile, err := os.Create(logPath)
@@ -61,47 +73,66 @@ func StartMachine(ctx context.Context) (*MicroVM, error) {
 				CID:  cid,
 			},
 		},
-		Drives: []models.Drive{
-			{
-				DriveID:      firecracker.String("rootfs"),
-				PathOnHost:   firecracker.String("./deployment/firecracker/rootfs.squashfs"),
-				IsRootDevice: firecracker.Bool(true),
-				IsReadOnly:   firecracker.Bool(true),
-			},
-		},
+		Drives: driveConfigs,
 		MachineCfg: models.MachineConfiguration{
 			MemSizeMib: firecracker.Int64(512),
 			VcpuCount:  firecracker.Int64(1),
 		},
+		NetworkInterfaces: firecracker.NetworkInterfaces{
+			{
+				CNIConfiguration: &firecracker.CNIConfiguration{
+					NetworkName: "oblak",
+					IfName:      "eth0",
+				},
+			},
+		},
 	}
+
+	machineCtx, machineCancel := context.WithCancel(context.Background())
 
 	cmd := firecracker.VMCommandBuilder{}.
 		WithBin("firecracker").
 		WithSocketPath(controlPath).
 		WithStdout(logFile).
 		WithStderr(logFile).
-		Build(ctx)
+		Build(machineCtx)
 
-	machine, err := firecracker.NewMachine(ctx, firecrackerCfg, firecracker.WithProcessRunner(cmd))
+	machine, err := firecracker.NewMachine(machineCtx, firecrackerCfg, firecracker.WithProcessRunner(cmd))
 	if err != nil {
+		machineCancel()
 		_ = logFile.Close()
 		return nil, err
 	}
 
-	if err := machine.Start(ctx); err != nil {
+	if err := machine.Start(machineCtx); err != nil {
+		machineCancel()
 		_ = logFile.Close()
 		return nil, err
 	}
 
-	return &MicroVM{
-		Id:          id,
-		Cid:         cid,
-		LogPath:     logPath,
-		vsockPath:   vsockPath,
-		controlPath: controlPath,
-		logFile:     logFile,
-		machine:     machine,
-	}, nil
+	vm := &MicroVM{
+		Id:            id,
+		Cid:           cid,
+		LogPath:       logPath,
+		vsockPath:     vsockPath,
+		controlPath:   controlPath,
+		logFile:       logFile,
+		machine:       machine,
+		drives:        drives,
+		cancelMachine: machineCancel,
+	}
+
+	// Safety net: if the caller's context is cancelled before Stop() is called,
+	// run the full teardown so the VM doesn't run indefinitely.
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = vm.Stop()
+		case <-machineCtx.Done():
+		}
+	}()
+
+	return vm, nil
 }
 
 func (vm *MicroVM) Connect() (net.Conn, error) {
@@ -141,9 +172,30 @@ func (vm *MicroVM) Connect() (net.Conn, error) {
 }
 
 func (vm *MicroVM) Stop() error {
-	err := vm.machine.StopVMM()
-	_ = vm.logFile.Close()
-	_ = os.Remove(vm.vsockPath)
-	_ = os.Remove(vm.controlPath)
+	var err error
+	vm.stopOnce.Do(func() {
+		err = vm.machine.StopVMM()
+
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer waitCancel()
+		_ = vm.machine.Wait(waitCtx)
+		vm.cancelMachine()
+
+		_ = vm.logFile.Close()
+		_ = os.Remove(vm.vsockPath)
+		_ = os.Remove(vm.controlPath)
+	})
 	return err
+}
+
+func (vm *MicroVM) CleanUpDrives() {
+	for _, drive := range vm.drives {
+		if drive.Cleanup == nil {
+			continue
+		}
+		err := drive.Cleanup()
+		if err != nil {
+			log.Printf("error on drive cleanup: %v\n", err)
+		}
+	}
 }

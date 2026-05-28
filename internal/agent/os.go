@@ -27,11 +27,24 @@ func mountIfNotMounted(source, target, fsType string, flags uintptr) {
 	if err != nil {
 		WriteErr("failed to create mount point", err)
 	}
-	if err := syscall.Mount(source, target, fsType, flags, ""); err != nil {
+	if err = syscall.Mount(source, target, fsType, flags, ""); err != nil {
 		if !errors.Is(err, syscall.EBUSY) {
-			fmt.Printf("[agent] mount %s -> %s: %v\n", source, target, err)
+			WriteLog(fmt.Sprintf("mount %s -> %s: %v\n", source, target, err))
 		}
 	}
+}
+
+func mount(source, target, fsType string, flags uintptr) error {
+	err := os.MkdirAll(target, 0755)
+	if err != nil {
+		WriteErr("failed to create mount point", err)
+		return err
+	}
+	if err = syscall.Mount(source, target, fsType, flags, ""); err != nil {
+		WriteErr(fmt.Sprintf("mount %s -> %s", source, target), err)
+		return err
+	}
+	return nil
 }
 
 // Shutdown tells the kernel to halt.

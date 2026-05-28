@@ -11,8 +11,9 @@ import (
 	"oblak/internal/server/handler"
 )
 
-func (s *Server) registerRoutes(h *handler.Handler, middlewares ...api.StrictMiddlewareFunc) {
-	api.RegisterHandlers(s.router, api.NewStrictHandlerWithOptions(h, middlewares, api.StrictGinServerOptions{
+func (s *Server) registerRoutes(h *handler.Handler, middlewares ...gin.HandlerFunc) {
+	s.router.Use(middlewares...)
+	api.RegisterHandlers(s.router, api.NewStrictHandlerWithOptions(h, nil, api.StrictGinServerOptions{
 		ResponseErrorHandlerFunc: func(ctx *gin.Context, err error) {
 			var appErr *apperr.Error
 			if errors.As(err, &appErr) {

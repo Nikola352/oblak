@@ -6,6 +6,7 @@ const (
 	QuarantineBucket Bucket = "quarantine"
 	ExtractedBucket  Bucket = "extracted"
 	FunctionsBucket  Bucket = "functions"
+	DrivesBucket     Bucket = "drives"
 	LogsBucket       Bucket = "logs"
 	// Add more buckets as needed
 )
@@ -35,6 +36,11 @@ func NewBucketRegistry() *BucketRegistry {
 			},
 			FunctionsBucket: {
 				Name:          "oblak-functions",
+				IsPublic:      false,
+				RetentionDays: nil,
+			},
+			DrivesBucket: {
+				Name:          "oblak-drives",
 				IsPublic:      false,
 				RetentionDays: nil,
 			},

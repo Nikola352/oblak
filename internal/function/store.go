@@ -43,3 +43,15 @@ func (s *Store) UpdateFunctionStatus(ctx context.Context, functionId uuid.UUID, 
 	}
 	return nil
 }
+
+func (s *Store) UpdateFunctionStatusIf(ctx context.Context, functionId uuid.UUID, from, to Status) (bool, error) {
+	result, err := s.db.Exec(ctx, `
+          UPDATE functions 
+          SET status = $1 
+          WHERE function_id = $2 AND status = $3
+      `, to, functionId, from)
+	if err != nil {
+		return false, fmt.Errorf("update status function: %w", err)
+	}
+	return result.RowsAffected() == 1, nil
+}

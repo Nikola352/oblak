@@ -7,6 +7,14 @@ import (
 	"net"
 )
 
+const (
+	TypeBuild  = "build"
+	TypeExec   = "exec"
+	TypeOutput = "output"
+	TypeDone   = "done"
+	TypeError  = "error"
+)
+
 type Message struct {
 	Type     string `json:"type"`
 	Channel  string `json:"channel,omitempty"`
@@ -16,23 +24,23 @@ type Message struct {
 }
 
 func Build() Message {
-	return Message{Type: "build"}
+	return Message{Type: TypeBuild}
 }
 
 func Exec() Message {
-	return Message{Type: "exec"}
+	return Message{Type: TypeExec}
 }
 
 func Output(channel, data string) Message {
-	return Message{Type: "output", Channel: channel, Data: data}
+	return Message{Type: TypeOutput, Channel: channel, Data: data}
 }
 
 func Done(exitCode int) Message {
-	return Message{Type: "done", ExitCode: &exitCode}
+	return Message{Type: TypeDone, ExitCode: &exitCode}
 }
 
 func AgentError(msg string) Message {
-	return Message{Type: "error", Error: msg}
+	return Message{Type: TypeError, Error: msg}
 }
 
 type Conn struct {

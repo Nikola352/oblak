@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	message2 "oblak/internal/analyzer/message"
+	"oblak/internal/function"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
