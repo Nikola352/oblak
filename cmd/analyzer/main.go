@@ -11,9 +11,15 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("[analyzer] no .env file found, using environment variables")
+	}
+
 	config.Load()
 	const quarantinePath = "/tmp/quarantine"
 	if err := initializeQuarantineDirectory(quarantinePath); err != nil {

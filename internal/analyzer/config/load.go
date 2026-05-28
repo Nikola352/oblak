@@ -58,6 +58,11 @@ func Load() {
 		"Host File System Directory Route destination folder target where security scan summaries drop",
 	)
 
+	flag.StringVar(&Cfg.SemgrepToken, "semgrep-token",
+		GetEnv("SEMGREP_APP_TOKEN", "prazno"),
+		"Semgrep secret key",
+	)
+
 	flag.Parse()
 
 	validate()

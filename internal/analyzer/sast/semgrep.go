@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"oblak/internal/analyzer/config"
+	"os"
 	"os/exec"
 	"path/filepath"
 )
@@ -25,6 +27,12 @@ func (a SemgrepAnalyzer) Run(targetPath string) (*SemgrepOutput, error) {
 		return nil, fmt.Errorf("failed resolving absolute engine route path: %w", err)
 	}
 	log.Println("[SEMGREP] Beginning static analysis")
+
+	err = os.Setenv("SEMGREP_APP_TOKEN", config.Cfg.SemgrepToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set semgrep key to env variable: %w", err)
+	}
+
 	cmd := exec.Command(a.binaryPath, "scan", "--json", "--config", "r/python", "--quiet", absPath)
 	output, err := cmd.Output()
 	if err != nil {

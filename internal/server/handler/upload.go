@@ -49,8 +49,10 @@ func (h *Handler) UploadLambda(ctx context.Context, request api.UploadLambdaRequ
 		return nil, fmt.Errorf("error uploading file: %w", err)
 	}
 
+	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
+
 	// upload to DB
-	f, err := h.functionStore.CreateFunction(ctx, userUUID, function.StatusQuarantined, bucketName, objectName)
+	f, err := h.functionStore.CreateFunction(ctx, userUUID, function.StatusQuarantined, objectName, driveObjectName)
 	if err != nil {
 		return nil, fmt.Errorf("error saving function to db: %w", err)
 	}
@@ -60,8 +62,8 @@ func (h *Handler) UploadLambda(ctx context.Context, request api.UploadLambdaRequ
 	h.quarantineBus.Publish(events.QuarantineEvent{
 		FunctionID: f.FunctionId,
 		UserID:     f.UserId,
-		Bucket:     f.Bucket,
-		Path:       f.Path,
+		Bucket:     filestore.NewBucketRegistry().Name(filestore.QuarantineBucket),
+		Path:       f.ArchivePath,
 		Timestamp:  time.Now(),
 	})
 

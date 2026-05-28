@@ -16,18 +16,18 @@ func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) CreateFunction(ctx context.Context, userId uuid.UUID, status Status, bucket, path string) (Function, error) {
+func (s *Store) CreateFunction(ctx context.Context, userId uuid.UUID, status Status, archivePath, drivePath string) (Function, error) {
 	f := Function{
-		FunctionId: uuid.New(),
-		UserId:     userId,
-		Status:     status,
-		Bucket:     bucket,
-		Path:       path,
+		FunctionId:  uuid.New(),
+		UserId:      userId,
+		Status:      status,
+		ArchivePath: archivePath,
+		DrivePath:   drivePath,
 	}
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO functions (function_id, user_id, status, bucket, path)
+		INSERT INTO functions (function_id, user_id, status, archive_path, drive_path)
 		VALUES ($1, $2, $3, $4, $5)
-	`, f.FunctionId, f.UserId, f.Status, f.Bucket, f.Path)
+	`, f.FunctionId, f.UserId, f.Status, f.ArchivePath, f.DrivePath)
 	if err != nil {
 		return Function{}, fmt.Errorf("create function: %w", err)
 	}
