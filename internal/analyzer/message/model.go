@@ -1,8 +1,6 @@
 package message
 
 import (
-	"oblak/internal/function"
-
 	"github.com/google/uuid"
 )
 
