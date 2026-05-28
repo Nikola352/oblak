@@ -1,9 +1,10 @@
-package analyzer_mock
+package analyzerpublisher
 
 import (
 	"encoding/json"
 	"fmt"
 	message2 "oblak/internal/analyzer/message"
+	"oblak/internal/server/filestore"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
@@ -11,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func StartPublisher() error {
+func StartPublisher(funcMessage message2.FunctionMessage) error {
 	amqpURI := "amqp://admin:admin@localhost:5672/"
 	exchangeName := "analyzer"
 	cfg := publisherConfig(amqpURI, exchangeName)
@@ -20,7 +21,7 @@ func StartPublisher() error {
 	if err != nil {
 		return fmt.Errorf("failed to create subscriber: %w", err)
 	}
-	funcMessage := createMessage()
+
 	payloadBytes, err := json.Marshal(funcMessage)
 	if err != nil {
 		return fmt.Errorf("failed to marshal function message struct: %w", err)
@@ -56,15 +57,10 @@ func publisherConfig(amqpURI, exchangeName string) amqp.Config {
 	}
 }
 
-func createMessage() message2.FunctionMessage {
-	id, err := uuid.Parse("dde950d8-0437-4a8a-98cf-70a28096c43b")
-	if err != nil {
-		panic(err)
-	}
+func CreateMessage(id uuid.UUID, path string) message2.FunctionMessage {
 	return message2.FunctionMessage{
-		Path:       "clean_dependent.tar.gz",
-		Bucket:     "quarantine",
+		Path:       path,
+		Bucket:     filestore.NewBucketRegistry().Name(filestore.QuarantineBucket),
 		FunctionId: id,
 	}
-
 }

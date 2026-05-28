@@ -3,9 +3,12 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"oblak/internal/function"
 	"oblak/internal/vm/vm"
+
+	"github.com/google/uuid"
 )
 
 type EnvironmentPrepareService struct {
@@ -26,7 +29,9 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 		return nil // ack
 	}
 
-	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, msg.DependenciesObjectName); err != nil {
+	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
+
+	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName); err != nil {
 		var userErr *vm.UserError
 		if errors.As(err, &userErr) {
 			log.Printf("environment prepare: %v", userErr)
@@ -41,7 +46,7 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 		return err
 	}
 
-	if err = s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusReady); err != nil {
+	if err = s.functionStore.UpdateFunctionStatusAndDrivePath(ctx, msg.FunctionId, function.StatusReady, driveObjectName); err != nil {
 		return err
 	}
 

@@ -18,6 +18,8 @@ type Config struct {
 
 	// Target Storage Reporting Parameters
 	JSONReportOutputPath string
+
+	SemgrepToken string
 }
 
 var Cfg Config

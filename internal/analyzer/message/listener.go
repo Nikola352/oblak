@@ -12,6 +12,7 @@ import (
 	"oblak/internal/analyzer/llm"
 	orchestrator2 "oblak/internal/analyzer/orchestrator"
 	"oblak/internal/analyzer/sast"
+	"oblak/internal/analyzer/vmpublish"
 	"oblak/internal/function"
 	"oblak/internal/server/database"
 	"oblak/internal/server/filestore"
@@ -105,8 +106,13 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 	}
 	err = deps.FileStore.Move(ctx, fileName, deps.BucketRegistry.Name(filestore.FunctionsBucket))
 
+	if err = vmpublish.Publish(payload.FunctionId, payload.Path); err != nil {
+		return err
+	}
+
 	return err
 }
+
 func unmarshalMessage(msg *message.Message) (*FunctionMessage, error) {
 	var msgData FunctionMessage
 	if err := json.Unmarshal(msg.Payload, &msgData); err != nil {

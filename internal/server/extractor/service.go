@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"oblak/internal/function"
+	"oblak/internal/server/analyzerpublisher"
 	"oblak/internal/server/events"
 	"time"
 
@@ -72,7 +73,10 @@ func (s *Service) StartExtractionWorker() {
 	go func() {
 		for event := range ch {
 			log.Printf("Extraction event: function %s", event.FunctionID)
-			// Add your business logic here
+			funcMessage := analyzerpublisher.CreateMessage(event.FunctionID, event.Path)
+			if err := analyzerpublisher.StartPublisher(funcMessage); err != nil {
+				log.Fatalf("Failed to start service: %v", err)
+			}
 		}
 	}()
 }

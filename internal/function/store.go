@@ -16,18 +16,18 @@ func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
 
-func (s *Store) CreateFunction(ctx context.Context, userId uuid.UUID, status Status, bucket, path string) (Function, error) {
+func (s *Store) CreateFunction(ctx context.Context, userId uuid.UUID, status Status, archivePath string) (Function, error) {
 	f := Function{
-		FunctionId: uuid.New(),
-		UserId:     userId,
-		Status:     status,
-		Bucket:     bucket,
-		Path:       path,
+		FunctionId:  uuid.New(),
+		UserId:      userId,
+		Status:      status,
+		ArchivePath: archivePath,
+		DrivePath:   nil,
 	}
 	_, err := s.db.Exec(ctx, `
-		INSERT INTO functions (function_id, user_id, status, bucket, path)
+		INSERT INTO functions (function_id, user_id, status, archive_path, drive_path)
 		VALUES ($1, $2, $3, $4, $5)
-	`, f.FunctionId, f.UserId, f.Status, f.Bucket, f.Path)
+	`, f.FunctionId, f.UserId, f.Status, f.ArchivePath, f.DrivePath)
 	if err != nil {
 		return Function{}, fmt.Errorf("create function: %w", err)
 	}
@@ -54,4 +54,17 @@ func (s *Store) UpdateFunctionStatusIf(ctx context.Context, functionId uuid.UUID
 		return false, fmt.Errorf("update status function: %w", err)
 	}
 	return result.RowsAffected() == 1, nil
+}
+
+func (s *Store) UpdateFunctionStatusAndDrivePath(ctx context.Context, functionId uuid.UUID, status Status, drivePath string) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE functions 
+		SET status = $1
+		AND drive_path = $2
+		WHERE function_id = $3
+	`, status, drivePath, functionId)
+	if err != nil {
+		return fmt.Errorf("update status function: %w", err)
+	}
+	return nil
 }

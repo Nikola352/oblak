@@ -35,11 +35,6 @@ func (h *BuildHandler) Handle(msg *message.Message) error {
 		msg.Ack()
 		return nil
 	}
-	if err := validateObjectName(m.DependenciesObjectName); err != nil {
-		log.Printf("build handler: invalid dependencies_object_name: %v", err)
-		msg.Ack()
-		return nil
-	}
 	if err := h.service.Prepare(msg.Context(), m); err != nil {
 		return err
 	}
