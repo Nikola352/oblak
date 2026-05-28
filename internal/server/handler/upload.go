@@ -49,10 +49,8 @@ func (h *Handler) UploadLambda(ctx context.Context, request api.UploadLambdaRequ
 		return nil, fmt.Errorf("error uploading file: %w", err)
 	}
 
-	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
-
 	// upload to DB
-	f, err := h.functionStore.CreateFunction(ctx, userUUID, function.StatusQuarantined, objectName, driveObjectName)
+	f, err := h.functionStore.CreateFunction(ctx, userUUID, function.StatusQuarantined, objectName)
 	if err != nil {
 		return nil, fmt.Errorf("error saving function to db: %w", err)
 	}

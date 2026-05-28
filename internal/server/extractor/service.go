@@ -3,8 +3,8 @@ package extractor
 import (
 	"context"
 	"log"
-	"oblak/internal/analyzerpublisher"
 	"oblak/internal/function"
+	"oblak/internal/server/analyzerpublisher"
 	"oblak/internal/server/events"
 	"time"
 

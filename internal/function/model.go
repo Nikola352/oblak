@@ -22,5 +22,5 @@ type Function struct {
 	UserId      uuid.UUID `db:"user_id"      json:"user_id"`
 	Status      Status    `db:"status"       json:"status"`
 	ArchivePath string    `db:"archive_path" json:"archive_path"`
-	DrivePath   string    `db:"drive_path"   json:"drive_path"`
+	DrivePath   *string   `db:"drive_path"   json:"drive_path"`
 }
