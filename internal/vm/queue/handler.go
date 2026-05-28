@@ -36,6 +36,7 @@ func (h *BuildHandler) Handle(msg *message.Message) error {
 		return nil
 	}
 	if err := h.service.Prepare(msg.Context(), m); err != nil {
+		log.Printf("failed to prepare environment: %v", err)
 		return err
 	}
 	return nil

@@ -40,6 +40,7 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 			}
 			return nil // ack
 		}
+		log.Printf("environment prepare: %v", err)
 		if dbErr := s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusVerified); dbErr != nil {
 			log.Printf("failed to reset status after prepare error: %v", dbErr)
 		}
@@ -47,6 +48,7 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 	}
 
 	if err = s.functionStore.UpdateFunctionStatusAndDrivePath(ctx, msg.FunctionId, function.StatusReady, driveObjectName); err != nil {
+		log.Printf("failed to write status to db: %v", err)
 		return err
 	}
 

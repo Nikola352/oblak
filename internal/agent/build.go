@@ -17,7 +17,13 @@ func (j *BuildJob) Run(conn *agentproto.Conn) error {
 		return err
 	}
 
-	cmd := exec.Command("python3", "-m", "pip", "install", "-r", "/app/requirements.txt", "--target", "/deps")
+	cmd := exec.Command(
+		"python3", "-m", "pip", "install",
+		"-r", "/app/requirements.txt",
+		"--target", "/deps",
+		"--ignore-installed",
+		"--root-user-action=ignore",
+	)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	if err := startWithStream(cmd, e.emit); err != nil {

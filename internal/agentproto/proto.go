@@ -23,6 +23,13 @@ type Message struct {
 	Error    string `json:"error,omitempty"`
 }
 
+func (m Message) String() string {
+	if m.ExitCode != nil {
+		return fmt.Sprintf("{type:%s exit_code:%d error:%s}", m.Type, *m.ExitCode, m.Error)
+	}
+	return fmt.Sprintf("{type:%s channel:%s data:%s}", m.Type, m.Channel, m.Data)
+}
+
 func Build() Message {
 	return Message{Type: TypeBuild}
 }
