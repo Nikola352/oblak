@@ -1,7 +1,9 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -10,7 +12,6 @@ import (
 	cliconfig "oblak/internal/cli/config"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -51,22 +52,42 @@ func validatePath(path string) (string, error) {
 		fmt.Printf("Error resolving path: %s\n", err)
 	}
 
-	if _, err := os.Stat(absPath); err != nil {
+	fileInfo, err := os.Stat(absPath)
+	if err != nil {
 		return "", fmt.Errorf("file not found: %w", err)
 	}
 
-	if !strings.HasSuffix(absPath, ".tar.gz") && !strings.HasSuffix(absPath, ".tgz") {
-		return "", fmt.Errorf("file must be .tar.gz, .tgz, or format")
+	if !fileInfo.IsDir() {
+		return "", fmt.Errorf("file path is not a directory")
 	}
 	return absPath, nil
 }
 
 func uploadFile(path string, profile cliconfig.Profile) error {
-	body, contentType, err := buildBody(path)
+	body, err := zipFolder(path)
 	if err != nil {
 		return fmt.Errorf("creating request body: %w", err)
 	}
 
+	// CONVERTING TO MULTIPART BECAUSE ENDPOINT EXPECTS IT THIS IS NOT BEST WAY
+	// TODO instead of multipart form data send application/zip data
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	part, err := writer.CreateFormFile("function", "function.tar.gz")
+	if err != nil {
+		return err
+	}
+
+	_, err = part.Write(body.Bytes())
+	if err != nil {
+		return err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return err
+	}
 	client, err := httpclient.NewSignedClient(profile)
 	if err != nil {
 		return err
@@ -74,7 +95,7 @@ func uploadFile(path string, profile cliconfig.Profile) error {
 
 	ctx := context.Background()
 
-	response, err := client.UploadLambdaWithBodyWithResponse(ctx, contentType, body)
+	response, err := client.UploadLambdaWithBodyWithResponse(ctx, writer.FormDataContentType(), &buf)
 	if err != nil {
 		return err
 	}
@@ -84,38 +105,71 @@ func uploadFile(path string, profile cliconfig.Profile) error {
 	return nil
 }
 
-func buildBody(path string) (*bytes.Buffer, string, error) {
-	// Open the tar.gz file
-	file, err := os.Open(path)
+func zipFolder(source string) (*bytes.Buffer, error) {
+	buffer := new(bytes.Buffer)
+	gzipWriter := gzip.NewWriter(buffer)
+
+	defer func(gzipWriter *gzip.Writer) {
+		err := gzipWriter.Close()
+		if err != nil {
+			fmt.Printf("closing gzip writer: %v", err)
+		}
+	}(gzipWriter)
+
+	tarWriter := tar.NewWriter(gzipWriter)
+	defer func(tarWriter *tar.Writer) {
+		err := tarWriter.Close()
+		if err != nil {
+			fmt.Printf("closing tar writer: %v", err)
+		}
+	}(tarWriter)
+
+	err := filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+
+		// skip root
+		if relPath == "." {
+			return nil
+		}
+
+		header, err := tar.FileInfoHeader(info, "")
+		if err != nil {
+			return err
+		}
+
+		header.Name = relPath
+
+		// write header
+		if err := tarWriter.WriteHeader(header); err != nil {
+			return err
+		}
+
+		// directories have no content
+		if info.IsDir() {
+			return nil
+		}
+
+		file, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+
+		_, err = io.Copy(tarWriter, file)
+		return err
+	})
+
 	if err != nil {
-		return nil, "", fmt.Errorf("opening file: %w", err)
+		return nil, err
 	}
-	defer func(file *os.File) {
-		_ = file.Close()
-	}(file)
-
-	// Create multipart form data
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	// Add the file to the form
-	part, err := writer.CreateFormFile("function", filepath.Base(path))
-	if err != nil {
-		return nil, "", fmt.Errorf("creating form file: %w", err)
-	}
-
-	_, err = io.Copy(part, file)
-	if err != nil {
-		return nil, "", fmt.Errorf("copying file content: %w", err)
-	}
-
-	// Close the writer to set the terminating boundary
-	err = writer.Close()
-	if err != nil {
-		return nil, "", fmt.Errorf("closing writer: %w", err)
-	}
-
-	return body, writer.FormDataContentType(), nil
+	return buffer, nil
 }
 
 func init() {
