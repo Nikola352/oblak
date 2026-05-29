@@ -7,6 +7,7 @@ import (
 	"log"
 	"oblak/internal/function"
 	"oblak/internal/vm/vm"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -31,7 +32,8 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 
 	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
 
-	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName); err != nil {
+	objectName := generatePrepareObjectName(msg.FunctionId)
+	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName, objectName); err != nil {
 		var userErr *vm.UserError
 		if errors.As(err, &userErr) {
 			log.Printf("environment prepare: %v", userErr)
@@ -53,4 +55,10 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 	}
 
 	return nil
+}
+
+func generatePrepareObjectName(id uuid.UUID) string {
+	currentTime := time.Now().Format("2006_01_02_15_04_05")
+
+	return fmt.Sprintf("%s_%s_prepare.log", id.String(), currentTime)
 }

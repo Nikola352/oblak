@@ -7,6 +7,8 @@ import (
 	"oblak/internal/invocation"
 	"oblak/internal/vm/vm"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ExecutionService struct {
@@ -34,7 +36,8 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 
 	logsObjectName := fmt.Sprintf("%s.log", msg.InvocationId)
 
-	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName); err != nil {
+	objectName := generateObjectName(msg.InvocationId)
+	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName, objectName); err != nil {
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
 			log.Printf("failed to reset status after execute error: %v", dbErr)
 		}
@@ -46,4 +49,9 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 	}
 
 	return nil
+}
+func generateObjectName(id uuid.UUID) string {
+	currentTime := time.Now().Format("2006_01_02_15_04_05")
+
+	return fmt.Sprintf("%s_%s.log", id.String(), currentTime)
 }

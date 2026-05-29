@@ -11,14 +11,20 @@ import (
 )
 
 type ExecutionRunner struct {
-	filestore *minio.Client
+	filestore   *minio.Client
+	logStreamer *InvocationLogStreamer
 }
 
-func NewExecutionRunner(filestore *minio.Client) *ExecutionRunner {
-	return &ExecutionRunner{filestore}
+func NewExecutionRunner(minioClient *minio.Client) *ExecutionRunner {
+	bucketRegistry := filestore.NewBucketRegistry()
+	bucketName := bucketRegistry.Name(filestore.LogsBucket)
+	return &ExecutionRunner{
+		filestore:   minioClient,
+		logStreamer: NewInvocationLogStreamer(minioClient, bucketName),
+	}
 }
 
-func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
+func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName, objectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -58,6 +64,7 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	defer m.CleanUpDrives()
 
 	log.Printf("Log available at: %s\n", m.LogPath)
+	log.Printf("Log about to start 1")
 
 	rawConn, err := m.Connect()
 	if err != nil {
@@ -67,21 +74,17 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	defer func(conn *agentproto.Conn) {
 		_ = conn.Close()
 	}(conn)
+	log.Printf("Log about to start")
 
 	if err = conn.Send(agentproto.Exec()); err != nil {
 		return err
 	}
 
-	for {
-		msg, err := conn.Receive()
-		if err != nil {
-			return err
-		}
-		log.Println(msg) // TODO: stream outputs to minio
-		if msg.Type == agentproto.TypeDone || msg.Type == agentproto.TypeError {
-			break
-		}
+	log.Println(objectName)
+	if _, err = e.logStreamer.Stream(ctx, objectName, conn); err != nil {
+		return fmt.Errorf("failed during log streaming: %w", err)
 	}
+	log.Printf("Log streaming completed")
 
 	if err = m.Stop(); err != nil {
 		log.Printf("failed to stop vm %s: %v", m.Id, err)
