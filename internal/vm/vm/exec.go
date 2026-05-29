@@ -24,7 +24,7 @@ func NewExecutionRunner(minioClient *minio.Client) *ExecutionRunner {
 	}
 }
 
-func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName, objectName string) (err error) {
+func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -80,8 +80,7 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 		return err
 	}
 
-	log.Println(objectName)
-	if _, err = e.logStreamer.Stream(ctx, objectName, conn); err != nil {
+	if _, err = e.logStreamer.Stream(ctx, logsObjectName, conn); err != nil {
 		return fmt.Errorf("failed during log streaming: %w", err)
 	}
 	log.Printf("Log streaming completed")

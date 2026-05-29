@@ -7,8 +7,10 @@ import (
 	"io"
 	"log"
 	"oblak/internal/function"
+	"oblak/internal/invocation"
 	"oblak/internal/vm/service"
 	"strings"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -16,11 +18,12 @@ import (
 const maxPayloadBytes = 64 * 1024
 
 type BuildHandler struct {
-	service *service.EnvironmentPrepareService
+	service         *service.EnvironmentPrepareService
+	invocationStore *invocation.Store
 }
 
-func NewBuildHandler(service *service.EnvironmentPrepareService) *BuildHandler {
-	return &BuildHandler{service}
+func NewBuildHandler(service *service.EnvironmentPrepareService, invocationStore *invocation.Store) *BuildHandler {
+	return &BuildHandler{service, invocationStore}
 }
 
 func (h *BuildHandler) Handle(msg *message.Message) error {
@@ -35,6 +38,12 @@ func (h *BuildHandler) Handle(msg *message.Message) error {
 		msg.Ack()
 		return nil
 	}
+	_, err := h.invocationStore.CreateInvocation(msg.Context(), m.FunctionId, time.Now())
+	if err != nil {
+		msg.Ack()
+		log.Printf("Failed to create message: %v", err)
+		return err
+	}
 	if err := h.service.Prepare(msg.Context(), m); err != nil {
 		log.Printf("failed to prepare environment: %v", err)
 		return err
@@ -43,14 +52,16 @@ func (h *BuildHandler) Handle(msg *message.Message) error {
 }
 
 type ExecuteHandler struct {
-	service *service.ExecutionService
+	service         *service.ExecutionService
+	invocationStore *invocation.Store
 }
 
-func NewExecuteHandler(service *service.ExecutionService) *ExecuteHandler {
-	return &ExecuteHandler{service}
+func NewExecuteHandler(service *service.ExecutionService, invocationStore *invocation.Store) *ExecuteHandler {
+	return &ExecuteHandler{service, invocationStore}
 }
 
 func (h *ExecuteHandler) Handle(msg *message.Message) error {
+
 	var m service.ExecuteMessage
 	if err := decodePayload(msg.Payload, &m); err != nil {
 		log.Printf("execute handler: malformed message: %v", err)
@@ -67,6 +78,7 @@ func (h *ExecuteHandler) Handle(msg *message.Message) error {
 		msg.Ack()
 		return nil
 	}
+
 	if err := h.service.Execute(msg.Context(), m); err != nil {
 		return err
 	}

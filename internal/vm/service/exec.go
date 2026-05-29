@@ -34,24 +34,24 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 		return nil // ack
 	}
 
-	logsObjectName := fmt.Sprintf("%s.log", msg.InvocationId)
+	currentTime := time.Now()
 
-	objectName := generateObjectName(msg.InvocationId)
-	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName, objectName); err != nil {
+	logsObjectName := generateObjectName(msg.InvocationId, currentTime)
+
+	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName); err != nil {
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
 			log.Printf("failed to reset status after execute error: %v", dbErr)
 		}
 		return err
 	}
 
-	if err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, logsObjectName, time.Now()); err != nil {
+	if err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, logsObjectName, currentTime); err != nil {
 		log.Printf("failed to reset status after execute error: %v", err)
 	}
 
 	return nil
 }
-func generateObjectName(id uuid.UUID) string {
-	currentTime := time.Now().Format("2006_01_02_15_04_05")
+func generateObjectName(id uuid.UUID, currentTime time.Time) string {
 
-	return fmt.Sprintf("%s_%s.log", id.String(), currentTime)
+	return fmt.Sprintf("%s_%s.log", id.String(), currentTime.Format("2006_01_02_15_04_05"))
 }
