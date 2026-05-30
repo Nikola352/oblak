@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	httpclient "oblak/internal/cli/client"
 
@@ -26,12 +28,19 @@ var listCmd = &cobra.Command{
 
 		ctx := context.Background()
 
-		response, err := client.GetHealthWithResponse(ctx)
+		response, err := client.GetUserFunctionsWithResponse(ctx)
 		if err != nil {
 			return err
 		}
 
-		fmt.Println(string(response.Body))
+		var prettyJSON bytes.Buffer
+		err = json.Indent(&prettyJSON, response.Body, "", "    ") // 4 spaces indentation
+		if err != nil {
+			return fmt.Errorf("failed to format JSON: %w", err)
+		}
+
+		// Print the indented string
+		fmt.Println(prettyJSON.String())
 
 		return nil
 	},

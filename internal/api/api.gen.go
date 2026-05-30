@@ -18,6 +18,17 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Error defines model for Error.
+type Error struct {
+	Error string `json:"error"`
+}
+
+// FunctionEntity defines model for FunctionEntity.
+type FunctionEntity struct {
+	Id     string `json:"id"`
+	Status string `json:"status"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status string `json:"status"`
@@ -27,6 +38,12 @@ type HealthResponse struct {
 type UploadResponse struct {
 	Status string `json:"status"`
 }
+
+// BadRequest defines model for BadRequest.
+type BadRequest = Error
+
+// NotFound defines model for NotFound.
+type NotFound = Error
 
 // UploadLambdaMultipartBody defines parameters for UploadLambda.
 type UploadLambdaMultipartBody struct {
@@ -113,12 +130,27 @@ type ClientInterface interface {
 	// GetHealth request
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetUserFunctions request
+	GetUserFunctions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// UploadLambdaWithBody request with any body
 	UploadLambdaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetUserFunctions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetUserFunctionsRequest(c.Server)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +183,33 @@ func NewGetHealthRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetUserFunctionsRequest generates requests for GetUserFunctions
+func NewGetUserFunctionsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/list-functions")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -243,6 +302,9 @@ type ClientWithResponsesInterface interface {
 	// GetHealthWithResponse request
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
 
+	// GetUserFunctionsWithResponse request
+	GetUserFunctionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUserFunctionsResponse, error)
+
 	// UploadLambdaWithBodyWithResponse request with any body
 	UploadLambdaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadLambdaResponse, error)
 }
@@ -271,6 +333,38 @@ func (r GetHealthResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetHealthResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetUserFunctionsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]FunctionEntity
+	JSON400      *BadRequest
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetUserFunctionsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetUserFunctionsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetUserFunctionsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -316,6 +410,15 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 	return ParseGetHealthResponse(rsp)
 }
 
+// GetUserFunctionsWithResponse request returning *GetUserFunctionsResponse
+func (c *ClientWithResponses) GetUserFunctionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUserFunctionsResponse, error) {
+	rsp, err := c.GetUserFunctions(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetUserFunctionsResponse(rsp)
+}
+
 // UploadLambdaWithBodyWithResponse request with arbitrary body returning *UploadLambdaResponse
 func (c *ClientWithResponses) UploadLambdaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadLambdaResponse, error) {
 	rsp, err := c.UploadLambdaWithBody(ctx, contentType, body, reqEditors...)
@@ -345,6 +448,46 @@ func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetUserFunctionsResponse parses an HTTP response from a GetUserFunctionsWithResponse call
+func ParseGetUserFunctionsResponse(rsp *http.Response) (*GetUserFunctionsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetUserFunctionsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []FunctionEntity
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	}
 
@@ -382,6 +525,9 @@ type ServerInterface interface {
 
 	// (GET /health)
 	GetHealth(c *gin.Context)
+	// Get all functions for the authenticated user
+	// (GET /list-functions)
+	GetUserFunctions(c *gin.Context)
 
 	// (POST /upload-lambda)
 	UploadLambda(c *gin.Context)
@@ -407,6 +553,19 @@ func (siw *ServerInterfaceWrapper) GetHealth(c *gin.Context) {
 	}
 
 	siw.Handler.GetHealth(c)
+}
+
+// GetUserFunctions operation middleware
+func (siw *ServerInterfaceWrapper) GetUserFunctions(c *gin.Context) {
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetUserFunctions(c)
 }
 
 // UploadLambda operation middleware
@@ -450,8 +609,13 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	}
 
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
+	router.GET(options.BaseURL+"/list-functions", wrapper.GetUserFunctions)
 	router.POST(options.BaseURL+"/upload-lambda", wrapper.UploadLambda)
 }
+
+type BadRequestJSONResponse Error
+
+type NotFoundJSONResponse Error
 
 type GetHealthRequestObject struct {
 }
@@ -470,6 +634,55 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserFunctionsRequestObject struct {
+}
+
+type GetUserFunctionsResponseObject interface {
+	VisitGetUserFunctionsResponse(w http.ResponseWriter) error
+}
+
+type GetUserFunctions200JSONResponse []FunctionEntity
+
+func (response GetUserFunctions200JSONResponse) VisitGetUserFunctionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserFunctions400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetUserFunctions400JSONResponse) VisitGetUserFunctionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserFunctions404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetUserFunctions404JSONResponse) VisitGetUserFunctionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -501,6 +714,9 @@ type StrictServerInterface interface {
 
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// Get all functions for the authenticated user
+	// (GET /list-functions)
+	GetUserFunctions(ctx context.Context, request GetUserFunctionsRequestObject) (GetUserFunctionsResponseObject, error)
 
 	// (POST /upload-lambda)
 	UploadLambda(ctx context.Context, request UploadLambdaRequestObject) (UploadLambdaResponseObject, error)
@@ -580,6 +796,30 @@ func (sh *strictHandler) GetHealth(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
 		if err := validResponse.VisitGetHealthResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUserFunctions operation middleware
+func (sh *strictHandler) GetUserFunctions(ctx *gin.Context) {
+	var request GetUserFunctionsRequestObject
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUserFunctions(ctx, request.(GetUserFunctionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUserFunctions")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetUserFunctionsResponseObject); ok {
+		if err := validResponse.VisitGetUserFunctionsResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

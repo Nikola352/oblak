@@ -68,3 +68,37 @@ func (s *Store) UpdateFunctionStatusAndDrivePath(ctx context.Context, functionId
 	}
 	return nil
 }
+
+func (s *Store) GetFunctionsByUserId(ctx context.Context, userUUID uuid.UUID) ([]Function, error) {
+	rows, err := s.db.Query(ctx, `
+		SELECT function_id, user_id, status, archive_path, drive_path
+		FROM functions
+		WHERE user_id = $1
+	`, userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("get functions by user id query: %w", err)
+	}
+	defer rows.Close()
+
+	var functions []Function
+	for rows.Next() {
+		var f Function
+		err := rows.Scan(
+			&f.FunctionId,
+			&f.UserId,
+			&f.Status,
+			&f.ArchivePath,
+			&f.DrivePath,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("get functions by user id scan: %w", err)
+		}
+		functions = append(functions, f)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get functions by user id rows loop: %w", err)
+	}
+
+	return functions, nil
+}
