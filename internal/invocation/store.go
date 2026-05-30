@@ -105,3 +105,47 @@ where f.user_id = $1 and i.function_id = $2 ORDER BY i.end_time
 
 	return functions, nil
 }
+
+//type Invocation struct {
+//	InvocationId   uuid.UUID  `db:"invocation_id"`
+//	FunctionId     uuid.UUID  `db:"function_id"`
+//	Status         Status     `db:"status"`
+//	InvocationTime *time.Time `db:"invocation_time"`
+//	EndTime        *time.Time `db:"end_time"`
+//	LogPath        *string    `db:"log_path"`
+//}
+
+func (s *Store) GetInvocationDetailsForUser(ctx context.Context, userId, invocationId uuid.UUID) (*Invocation, error) {
+	query := `
+SELECT i.invocation_id, i.function_id, i.status, i.end_time, i.invocation_time, i.log_path
+from invocations i join functions f on i.function_id = f.function_id
+where f.user_id = $1 and i.invocation_id = $2 ORDER BY i.end_time LIMIT 1
+`
+	rows, err := s.db.Query(ctx, query, userId, invocationId)
+	if err != nil {
+		return nil, fmt.Errorf("get functions with execution query: %w", err)
+	}
+	defer rows.Close()
+	var invocation Invocation
+	for rows.Next() {
+		var f Invocation
+		err := rows.Scan(
+			&f.InvocationId,
+			&f.FunctionId,
+			&f.Status,
+			&f.EndTime,
+			&f.InvocationTime,
+			&f.LogPath,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("get functions by user id scan: %w", err)
+		}
+		invocation = f
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get functions by user id rows loop: %w", err)
+	}
+
+	return &invocation, nil
+}

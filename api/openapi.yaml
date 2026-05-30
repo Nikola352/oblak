@@ -79,6 +79,31 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+
+  /invocations/{invocation_id}:
+    get:
+      summary: Get a specific invocation detail including its logs
+      operationId: GetInvocationDetails
+      parameters:
+        - name: invocation_id
+          in: path
+          required: true
+          description: The UUID of the specific invocation run
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Invocation details with execution logs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleInvocationDetailsResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
 components:
   schemas:
     InvocationResponse:
@@ -101,6 +126,48 @@ components:
           format: date-time
           nullable: true
           example: "2026-05-30T13:45:02Z"
+
+    SingleInvocationDetailsResponse:
+      type: object
+      required: [ invocation_id, status, invocation_time, logs ]
+      properties:
+        invocation_id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-49cd-a5d6-83d6e0743b51"
+        status:
+          type: string
+          example: "COMPLETED"
+        invocation_time:
+          type: string
+          format: date-time
+          example: "2026-05-30T13:45:00Z"
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-05-30T13:45:02Z"
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogLine'
+
+    LogLine:
+      type: object
+      required: [ timestamp, message, stream ]
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-05-30T13:45:00.123Z"
+        stream:
+          type: string
+          enum: [stdout, stderr]
+          example: "stdout"
+        message:
+          type: string
+          example: "Error connecting to Redis instance, retrying..."
+
     HealthResponse:
       type: object
       required: [status]
@@ -121,14 +188,12 @@ components:
         status:
           type: string
           example: "READY"
-
     UploadResponse:
       type: object
       required: [ status ]
       properties:
         status:
           type: string
-
     Error:
       type: object
       required: [error]

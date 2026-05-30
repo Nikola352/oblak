@@ -20,6 +20,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for LogLineStream.
+const (
+	Stderr LogLineStream = "stderr"
+	Stdout LogLineStream = "stdout"
+)
+
+// Valid indicates whether the value is a known member of the LogLineStream enum.
+func (e LogLineStream) Valid() bool {
+	switch e {
+	case Stderr:
+		return true
+	case Stdout:
+		return true
+	default:
+		return false
+	}
+}
+
 // Error defines model for Error.
 type Error struct {
 	Error string `json:"error"`
@@ -42,6 +60,25 @@ type InvocationResponse struct {
 	EndTime        *time.Time         `json:"end_time,omitempty"`
 	InvocationId   openapi_types.UUID `json:"invocation_id"`
 	InvocationTime time.Time          `json:"invocation_time"`
+	Status         string             `json:"status"`
+}
+
+// LogLine defines model for LogLine.
+type LogLine struct {
+	Message   string        `json:"message"`
+	Stream    LogLineStream `json:"stream"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+// LogLineStream defines model for LogLine.Stream.
+type LogLineStream string
+
+// SingleInvocationDetailsResponse defines model for SingleInvocationDetailsResponse.
+type SingleInvocationDetailsResponse struct {
+	EndTime        *time.Time         `json:"end_time,omitempty"`
+	InvocationId   openapi_types.UUID `json:"invocation_id"`
+	InvocationTime time.Time          `json:"invocation_time"`
+	Logs           []LogLine          `json:"logs"`
 	Status         string             `json:"status"`
 }
 
@@ -144,6 +181,9 @@ type ClientInterface interface {
 	// GetHealth request
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetInvocationDetails request
+	GetInvocationDetails(ctx context.Context, invocationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetUserFunctions request
 	GetUserFunctions(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -165,6 +205,18 @@ func (c *Client) GetFunctionInvocations(ctx context.Context, functionId openapi_
 
 func (c *Client) GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetHealthRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetInvocationDetails(ctx context.Context, invocationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetInvocationDetailsRequest(c.Server, invocationId)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +295,40 @@ func NewGetHealthRequest(server string) (*http.Request, error) {
 	}
 
 	operationPath := fmt.Sprintf("/health")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetInvocationDetailsRequest generates requests for GetInvocationDetails
+func NewGetInvocationDetailsRequest(server string, invocationId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "invocation_id", invocationId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/invocations/%s", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -365,6 +451,9 @@ type ClientWithResponsesInterface interface {
 	// GetHealthWithResponse request
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
 
+	// GetInvocationDetailsWithResponse request
+	GetInvocationDetailsWithResponse(ctx context.Context, invocationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetInvocationDetailsResponse, error)
+
 	// GetUserFunctionsWithResponse request
 	GetUserFunctionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUserFunctionsResponse, error)
 
@@ -428,6 +517,38 @@ func (r GetHealthResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetHealthResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetInvocationDetailsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SingleInvocationDetailsResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetInvocationDetailsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetInvocationDetailsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetInvocationDetailsResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -514,6 +635,15 @@ func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEdit
 	return ParseGetHealthResponse(rsp)
 }
 
+// GetInvocationDetailsWithResponse request returning *GetInvocationDetailsResponse
+func (c *ClientWithResponses) GetInvocationDetailsWithResponse(ctx context.Context, invocationId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetInvocationDetailsResponse, error) {
+	rsp, err := c.GetInvocationDetails(ctx, invocationId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetInvocationDetailsResponse(rsp)
+}
+
 // GetUserFunctionsWithResponse request returning *GetUserFunctionsResponse
 func (c *ClientWithResponses) GetUserFunctionsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetUserFunctionsResponse, error) {
 	rsp, err := c.GetUserFunctions(ctx, reqEditors...)
@@ -598,6 +728,46 @@ func ParseGetHealthResponse(rsp *http.Response) (*GetHealthResponse, error) {
 	return response, nil
 }
 
+// ParseGetInvocationDetailsResponse parses an HTTP response from a GetInvocationDetailsWithResponse call
+func ParseGetInvocationDetailsResponse(rsp *http.Response) (*GetInvocationDetailsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetInvocationDetailsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SingleInvocationDetailsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetUserFunctionsResponse parses an HTTP response from a GetUserFunctionsWithResponse call
 func ParseGetUserFunctionsResponse(rsp *http.Response) (*GetUserFunctionsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -672,6 +842,9 @@ type ServerInterface interface {
 
 	// (GET /health)
 	GetHealth(c *gin.Context)
+	// Get a specific invocation detail including its logs
+	// (GET /invocations/{invocation_id})
+	GetInvocationDetails(c *gin.Context, invocationId openapi_types.UUID)
 	// Get all functions for the authenticated user
 	// (GET /list-functions)
 	GetUserFunctions(c *gin.Context)
@@ -725,6 +898,31 @@ func (siw *ServerInterfaceWrapper) GetHealth(c *gin.Context) {
 	}
 
 	siw.Handler.GetHealth(c)
+}
+
+// GetInvocationDetails operation middleware
+func (siw *ServerInterfaceWrapper) GetInvocationDetails(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "invocation_id" -------------
+	var invocationId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "invocation_id", c.Param("invocation_id"), &invocationId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter invocation_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetInvocationDetails(c, invocationId)
 }
 
 // GetUserFunctions operation middleware
@@ -782,6 +980,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 
 	router.GET(options.BaseURL+"/functions/:function_id/invocations", wrapper.GetFunctionInvocations)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
+	router.GET(options.BaseURL+"/invocations/:invocation_id", wrapper.GetInvocationDetails)
 	router.GET(options.BaseURL+"/list-functions", wrapper.GetUserFunctions)
 	router.POST(options.BaseURL+"/upload-lambda", wrapper.UploadLambda)
 }
@@ -857,6 +1056,56 @@ func (response GetHealth200JSONResponse) VisitGetHealthResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvocationDetailsRequestObject struct {
+	InvocationId openapi_types.UUID `json:"invocation_id"`
+}
+
+type GetInvocationDetailsResponseObject interface {
+	VisitGetInvocationDetailsResponse(w http.ResponseWriter) error
+}
+
+type GetInvocationDetails200JSONResponse SingleInvocationDetailsResponse
+
+func (response GetInvocationDetails200JSONResponse) VisitGetInvocationDetailsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvocationDetails400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetInvocationDetails400JSONResponse) VisitGetInvocationDetailsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetInvocationDetails404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetInvocationDetails404JSONResponse) VisitGetInvocationDetailsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -940,6 +1189,9 @@ type StrictServerInterface interface {
 
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
+	// Get a specific invocation detail including its logs
+	// (GET /invocations/{invocation_id})
+	GetInvocationDetails(ctx context.Context, request GetInvocationDetailsRequestObject) (GetInvocationDetailsResponseObject, error)
 	// Get all functions for the authenticated user
 	// (GET /list-functions)
 	GetUserFunctions(ctx context.Context, request GetUserFunctionsRequestObject) (GetUserFunctionsResponseObject, error)
@@ -1048,6 +1300,32 @@ func (sh *strictHandler) GetHealth(ctx *gin.Context) {
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetHealthResponseObject); ok {
 		if err := validResponse.VisitGetHealthResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetInvocationDetails operation middleware
+func (sh *strictHandler) GetInvocationDetails(ctx *gin.Context, invocationId openapi_types.UUID) {
+	var request GetInvocationDetailsRequestObject
+
+	request.InvocationId = invocationId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetInvocationDetails(ctx, request.(GetInvocationDetailsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetInvocationDetails")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetInvocationDetailsResponseObject); ok {
+		if err := validResponse.VisitGetInvocationDetailsResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

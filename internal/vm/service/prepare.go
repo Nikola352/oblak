@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"oblak/internal/function"
+	"oblak/internal/invocation"
 	"oblak/internal/vm/vm"
 	"time"
 
@@ -13,15 +14,16 @@ import (
 )
 
 type EnvironmentPrepareService struct {
-	functionStore *function.Store
-	runner        *vm.EnvironmentPrepareRunner
+	functionStore   *function.Store
+	invocationStore *invocation.Store
+	runner          *vm.EnvironmentPrepareRunner
 }
 
-func NewEnvironmentPrepareService(functionStore *function.Store, runner *vm.EnvironmentPrepareRunner) *EnvironmentPrepareService {
-	return &EnvironmentPrepareService{functionStore, runner}
+func NewEnvironmentPrepareService(functionStore *function.Store, invocationStore *invocation.Store, runner *vm.EnvironmentPrepareRunner) *EnvironmentPrepareService {
+	return &EnvironmentPrepareService{functionStore, invocationStore, runner}
 }
 
-func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessage) error {
+func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessage, inv invocation.Invocation) error {
 	claimed, err := s.functionStore.UpdateFunctionStatusIf(ctx, msg.FunctionId, function.StatusVerified, function.StatusPreparingEnvironment)
 	if err != nil {
 		return err
@@ -53,12 +55,17 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 		log.Printf("failed to write status to db: %v", err)
 		return err
 	}
+	currentTime := time.Now()
+	log.Println(objectName)
+	err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, inv.InvocationId, invocation.StatusDone, objectName, currentTime)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
 
 func generatePrepareObjectName(id uuid.UUID) string {
-	currentTime := time.Now().Format("2006_01_02_15_04_05")
 
-	return fmt.Sprintf("%s_%s_prepare.log", id.String(), currentTime)
+	return fmt.Sprintf("%s_prepare.log", id.String())
 }

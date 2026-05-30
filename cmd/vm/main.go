@@ -40,6 +40,7 @@ func main() {
 
 	buildService := service.NewEnvironmentPrepareService(
 		functionStore,
+		invocationStore,
 		vm.NewEnvironmentPrepareRunner(minioClient),
 	)
 	executeService := service.NewExecutionService(
@@ -47,8 +48,8 @@ func main() {
 		vm.NewExecutionRunner(minioClient),
 	)
 
-	buildHandler := queue.NewBuildHandler(buildService)
-	executeHandler := queue.NewExecuteHandler(executeService)
+	buildHandler := queue.NewBuildHandler(buildService, invocationStore)
+	executeHandler := queue.NewExecuteHandler(executeService, invocationStore)
 
 	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, functionStore)
 	if err != nil {

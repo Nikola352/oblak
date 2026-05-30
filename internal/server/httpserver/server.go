@@ -4,6 +4,7 @@ import (
 	"oblak/internal/function"
 	"oblak/internal/invocation"
 	"oblak/internal/server/events"
+	"oblak/internal/server/invocations"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,13 +22,13 @@ type Server struct {
 }
 
 func New(db *pgxpool.Pool, filestore *minio.Client, kek string, quarantineBus *events.Bus[events.QuarantineEvent],
-	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store, invocationStore *invocation.Store) *Server {
+	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store, invocationStore *invocation.Store, invocationLogStore *invocations.InvocationLogStore) *Server {
 	s := &Server{
 		router:    gin.Default(),
 		db:        db,
 		filestore: filestore,
 	}
-	h := handler.New(functionStore, invocationStore, filestore, quarantineBus, extractionBus)
+	h := handler.New(functionStore, invocationStore, invocationLogStore, filestore, quarantineBus, extractionBus)
 	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
 	s.registerRoutes(h, auth)
 	return s
