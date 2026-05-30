@@ -4,7 +4,6 @@ type Bucket string
 
 const (
 	QuarantineBucket Bucket = "quarantine"
-	ExtractedBucket  Bucket = "extracted"
 	FunctionsBucket  Bucket = "functions"
 	DrivesBucket     Bucket = "drives"
 	LogsBucket       Bucket = "logs"
@@ -28,11 +27,6 @@ func NewBucketRegistry() *BucketRegistry {
 				Name:          "oblak-quarantine",
 				IsPublic:      false,
 				RetentionDays: nil,
-			},
-			ExtractedBucket: {
-				Name:          "oblak-extracted",
-				IsPublic:      false,
-				RetentionDays: ptr(1),
 			},
 			FunctionsBucket: {
 				Name:          "oblak-functions",

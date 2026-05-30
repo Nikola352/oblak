@@ -8,11 +8,9 @@ import (
 	"io"
 	"log"
 	"oblak/internal/server/events"
-	"oblak/internal/server/filestore"
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 )
 
@@ -31,7 +29,6 @@ func NewExtractor(filestore *minio.Client) *Extractor {
 
 func (e *Extractor) ExtractFromQuarantine(event events.QuarantineEvent) error {
 	ctx := context.Background()
-	registry := filestore.NewBucketRegistry()
 
 	obj, err := e.filestore.GetObject(ctx, event.Bucket, event.Path, minio.GetObjectOptions{})
 	if err != nil {
@@ -42,7 +39,7 @@ func (e *Extractor) ExtractFromQuarantine(event events.QuarantineEvent) error {
 	}(obj)
 
 	// unzip and save
-	err = e.Unzip(obj, registry, event)
+	err = e.Unzip(obj)
 	if err != nil {
 		return fmt.Errorf("failed to unzip object from quarantine: %w", err)
 	}
@@ -51,25 +48,7 @@ func (e *Extractor) ExtractFromQuarantine(event events.QuarantineEvent) error {
 	return nil
 }
 
-func (e *Extractor) UploadFile(bucketName string, file *tar.Reader, fileSize int64, headerName, path string) (minio.UploadInfo, error) {
-	ext := filepath.Ext(headerName)
-	objectName := fmt.Sprintf("%s/%s%s", path, uuid.New().String(), ext)
-	info, err := e.filestore.PutObject(context.Background(),
-		bucketName,
-		objectName,
-		file,
-		fileSize,
-		minio.PutObjectOptions{},
-	)
-
-	if err != nil {
-		return info, fmt.Errorf("uploading to quarantine: %w", err)
-	}
-	log.Printf("Uploaded to quarantine: %s (size: %d)\n\n", info.Key, info.Size)
-	return info, nil
-}
-
-func (e *Extractor) Unzip(obj *minio.Object, registry *filestore.BucketRegistry, event events.QuarantineEvent) error {
+func (e *Extractor) Unzip(obj *minio.Object) error {
 	gzReader, err := gzip.NewReader(obj)
 	if err != nil {
 		return fmt.Errorf("failed to create gzip reader: %w", err)
@@ -100,16 +79,13 @@ func (e *Extractor) Unzip(obj *minio.Object, registry *filestore.BucketRegistry,
 		totalExtractedSize += header.Size
 		totalExtractedFiles++
 
-		_, err = e.UploadFile(registry.Name(filestore.ExtractedBucket), tarReader, -1, cleanName, event.Path)
-		if err != nil {
-			return fmt.Errorf("failed to upload extracted file %s: %w", header.Name, err)
-		}
+		log.Printf("Safely extracted: %s file.\n", cleanName)
 	}
 	return nil
 }
 
 func validateTarHeader(header *tar.Header, totalExtractedSize int64, totalExtractedFiles int64) (cleanName string, err error) {
-	if header.Typeflag != tar.TypeReg {
+	if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeDir {
 		return "", fmt.Errorf("non-regular file type %c: %s", header.Typeflag, header.Name)
 	}
 

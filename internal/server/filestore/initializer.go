@@ -26,7 +26,7 @@ func NewBucketInitializer(client *minio.Client, registry *BucketRegistry) *Bucke
 
 func (b *BucketInitializer) InitializeBuckets(ctx context.Context) error {
 	// Iterate through all bucket types
-	bucketTypes := []Bucket{FunctionsBucket, LogsBucket, QuarantineBucket, ExtractedBucket, DrivesBucket}
+	bucketTypes := []Bucket{FunctionsBucket, LogsBucket, QuarantineBucket, DrivesBucket}
 
 	for _, bucketType := range bucketTypes {
 		bucketName := b.bucketRegistry.Name(bucketType)
