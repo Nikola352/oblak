@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	httpclient "oblak/internal/cli/client"
 
@@ -11,7 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Declare a variable to store the flag value
+const (
+	colorRed   = "\033[31m"
+	colorWhite = "\033[97m"
+	colorReset = "\033[0m"
+	colorCyan  = "\033[36m"
+	colorBold  = "\033[1m"
+)
+
 var invocationIdFlag string
 
 var detailsCmd = &cobra.Command{
@@ -27,12 +32,8 @@ var detailsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
 		ctx := context.Background()
-		var rawBody []byte
 
-		// Check if the user passed the function flag
-		// Call the new invocations history endpoint
 		parsedId, err := uuid.Parse(invocationIdFlag)
 		if err != nil {
 			return err
@@ -42,26 +43,39 @@ var detailsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-
 		if response.JSON200 == nil {
 			return fmt.Errorf("request failed with status %d: %s", response.StatusCode(), string(response.Body))
 		}
-		rawBody = response.Body
 
-		// Indent and print the JSON payload
-		var prettyJSON bytes.Buffer
-		err = json.Indent(&prettyJSON, rawBody, "", "    ")
-		if err != nil {
-			return fmt.Errorf("failed to format JSON: %w", err)
+		inv := response.JSON200
+
+		// Print basic details
+		fmt.Printf("%s%sInvocation ID:%s  %s\n", colorBold, colorCyan, colorReset, inv.InvocationId)
+		fmt.Printf("%s%sStatus:       %s  %s\n", colorBold, colorCyan, colorReset, inv.Status)
+		fmt.Printf("%s%sStarted:      %s  %s\n", colorBold, colorCyan, colorReset, inv.InvocationTime.Format("2006-01-02 15:04:05"))
+		if inv.EndTime != nil {
+			fmt.Printf("%s%sEnded:        %s  %s\n", colorBold, colorCyan, colorReset, inv.EndTime.Format("2006-01-02 15:04:05"))
+			duration := inv.EndTime.Sub(inv.InvocationTime)
+			fmt.Printf("%s%sDuration:     %s  %s\n", colorBold, colorCyan, colorReset, duration)
 		}
 
-		fmt.Println(prettyJSON.String())
+		// Separator
+		fmt.Printf("\n%s%s--- Logs ---%s\n\n", colorBold, colorCyan, colorReset)
+
+		// Print logs
+		for _, log := range inv.Logs {
+			color := colorWhite
+			if log.Stream == "stderr" {
+				color = colorRed
+			}
+			fmt.Printf("%s%s%s\n", color, log.Message, colorReset)
+		}
+
 		return nil
 	},
 }
 
 func init() {
-	// Register the local string flag `--function_id` (or `-f` shorthand)
 	detailsCmd.Flags().StringVarP(
 		&invocationIdFlag,
 		"invocation-id",
@@ -69,6 +83,5 @@ func init() {
 		"",
 		"Filter history logs by passing a specific function UUID",
 	)
-
 	rootCmd.AddCommand(detailsCmd)
 }

@@ -34,9 +34,9 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 		return nil // ack
 	}
 
-	currentTime := time.Now()
+	beginTime := time.Now()
 
-	logsObjectName := generateObjectName(msg.InvocationId, currentTime)
+	logsObjectName := generateObjectName(msg.InvocationId, beginTime)
 
 	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName); err != nil {
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
@@ -45,7 +45,8 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 		return err
 	}
 
-	if err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, logsObjectName, currentTime); err != nil {
+	endTime := time.Now()
+	if err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, msg.InvocationId, invocation.StatusDone, logsObjectName, endTime); err != nil {
 		log.Printf("failed to reset status after execute error: %v", err)
 	}
 
