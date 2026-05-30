@@ -71,3 +71,37 @@ func (s *Store) UpdateInvocationStatusAndLogPathAndEndTime(ctx context.Context, 
 	}
 	return nil
 }
+
+func (s *Store) GetInvocationsForUserAndFunction(ctx context.Context, userId, functionId uuid.UUID) ([]Invocation, error) {
+	query := `
+SELECT i.invocation_id, i.function_id, i.status, i.end_time, i.invocation_time
+from invocations i join functions f on i.function_id = f.function_id
+where f.user_id = $1 and i.function_id = $2 ORDER BY i.end_time
+`
+	rows, err := s.db.Query(ctx, query, userId, functionId)
+	if err != nil {
+		return nil, fmt.Errorf("get functions with execution query: %w", err)
+	}
+	defer rows.Close()
+	var functions []Invocation
+	for rows.Next() {
+		var f Invocation
+		err := rows.Scan(
+			&f.InvocationId,
+			&f.FunctionId,
+			&f.Status,
+			&f.EndTime,
+			&f.InvocationTime,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("get functions by user id scan: %w", err)
+		}
+		functions = append(functions, f)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get functions by user id rows loop: %w", err)
+	}
+
+	return functions, nil
+}

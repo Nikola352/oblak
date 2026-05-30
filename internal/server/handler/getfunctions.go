@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"log"
 	"oblak/internal/api"
 	"oblak/internal/function"
 
@@ -23,7 +24,7 @@ func (h *Handler) GetUserFunctions(ctx context.Context, request api.GetUserFunct
 	if !ok {
 		return nil, fmt.Errorf("user_id is not a string")
 	}
-	userFunctions, err := h.functionStore.GetFunctionsByUserId(ctx, userUUID)
+	userFunctions, err := h.functionStore.GetFunctionsByUserWithLatestExecution(ctx, userUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -31,12 +32,14 @@ func (h *Handler) GetUserFunctions(ctx context.Context, request api.GetUserFunct
 
 	return api.GetUserFunctions200JSONResponse(response), nil
 }
-func createGetUserFunctionsResponse(userFunctions []function.Function) []api.FunctionEntity {
+func createGetUserFunctionsResponse(userFunctions []function.FunctionWithLatestInvocation) []api.FunctionEntity {
 	response := make([]api.FunctionEntity, len(userFunctions))
 	for i, f := range userFunctions {
+		log.Println(f.LatestInvocationTimestamp)
 		response[i] = api.FunctionEntity{
-			Id:     f.FunctionId.String(),
-			Status: string(f.Status),
+			Id:            f.FunctionId.String(),
+			Status:        string(f.Status),
+			LastExecution: f.LatestInvocationTimestamp,
 		}
 	}
 	return response

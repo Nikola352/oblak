@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"oblak/internal/function"
+	"oblak/internal/invocation"
 	"oblak/internal/server/events"
 	"oblak/internal/server/extractor"
 	"oblak/internal/server/httpserver"
@@ -41,6 +42,7 @@ func main() {
 	bucketInitializer := filestore.NewBucketInitializer(minioClient, bucketRegistry)
 
 	functionStore := function.NewStore(db)
+	invocationStore := invocation.NewStore(db)
 	quarantineBus := events.NewBus[events.QuarantineEvent]()
 	extractionBus := events.NewBus[events.ExtractionEvent]()
 
@@ -51,7 +53,7 @@ func main() {
 	if err := bucketInitializer.InitializeBuckets(ctx); err != nil {
 		log.Fatalf("Failed to initialize buckets: %v", err)
 	}
-	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus, functionStore)
+	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus, functionStore, invocationStore)
 	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
 	}

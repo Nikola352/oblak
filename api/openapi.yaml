@@ -54,8 +54,53 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+  /functions/{function_id}/invocations:
+    get:
+      summary: Get invocation history for a specific function ordered from newest to oldest
+      operationId: GetFunctionInvocations
+      parameters:
+        - name: function_id
+          in: path
+          required: true
+          description: The UUID of the function
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: List of invocations ordered chronologically descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvocationResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
 components:
   schemas:
+    InvocationResponse:
+      type: object
+      required: [ invocation_id, status, invocation_time ]
+      properties:
+        invocation_id:
+          type: string
+          format: uuid
+          example: "d3b07384-d113-49cd-a5d6-83d6e0743b51"
+        status:
+          type: string
+          example: "COMPLETED"
+        invocation_time:
+          type: string
+          format: date-time
+          example: "2026-05-30T13:45:00Z"
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+          example: "2026-05-30T13:45:02Z"
     HealthResponse:
       type: object
       required: [status]
@@ -69,7 +114,10 @@ components:
         id:
           type: string
           example: "fn_98234"
-
+        last_execution:
+          type: string
+          format: date-time
+          example: "2026-10-05T20:24:00Z"
         status:
           type: string
           example: "READY"
