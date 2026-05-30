@@ -49,12 +49,10 @@ func (s *InvocationLogStore) GetLogsByInvocationId(ctx context.Context, logPath 
 			continue
 		}
 
-		// Case 1: It's a broken closing brace from a multi-line chunk split
 		if lineText == "}" {
 			continue // Safely drop the orphan brace, the payload message is already captured
 		}
 
-		// Case 2: It is a completion signal
 		if strings.Contains(lineText, "type:done") {
 			logs = append(logs, LogLine{
 				Timestamp: time.Now().UTC(),
@@ -64,16 +62,13 @@ func (s *InvocationLogStore) GetLogsByInvocationId(ctx context.Context, logPath 
 			continue
 		}
 
-		// Case 3: Parse standard streaming lines using regex matches
 		matches := logRegex.FindStringSubmatch(lineText)
 		if len(matches) >= 3 {
 			channel := matches[1] // e.g., "system", "stdout", "stderr"
 			message := matches[2] // The raw message block text
 
-			// Strip accidental trailing formatting braces if they got merged into the string match
 			message = strings.TrimSuffix(message, "}")
 
-			// Normalize the stream target based on internal engine channels
 			streamTarget := "stdout"
 			if channel == "stderr" || channel == "system" {
 				streamTarget = channel
@@ -85,7 +80,6 @@ func (s *InvocationLogStore) GetLogsByInvocationId(ctx context.Context, logPath 
 				Message:   strings.TrimSpace(message),
 			})
 		} else {
-			// Fallback: If it's a raw unformatted line text, just attach it cleanly
 			logs = append(logs, LogLine{
 				Timestamp: time.Now().UTC(),
 				Stream:    currentChannel,

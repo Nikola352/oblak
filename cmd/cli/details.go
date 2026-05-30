@@ -59,7 +59,6 @@ var detailsCmd = &cobra.Command{
 			fmt.Printf("%s%sDuration:     %s  %s\n", colorBold, colorCyan, colorReset, duration)
 		}
 
-		// Separator
 		fmt.Printf("\n%s%s--- Logs ---%s\n\n", colorBold, colorCyan, colorReset)
 
 		// Print logs
