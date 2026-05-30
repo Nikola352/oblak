@@ -103,6 +103,22 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+  /execute/{functionId}:
+    post:
+      operationId: ExecuteLambda
+      parameters:
+        - name: functionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
 
 components:
   schemas:
@@ -194,6 +210,13 @@ components:
       properties:
         status:
           type: string
+    ExecuteResponse:
+      type: object
+      required: [ status ]
+      properties:
+        status:
+          type: string
+
     Error:
       type: object
       required: [error]
