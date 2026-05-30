@@ -85,7 +85,7 @@ func (e *Extractor) Unzip(obj *minio.Object) error {
 }
 
 func validateTarHeader(header *tar.Header, totalExtractedSize int64, totalExtractedFiles int64) (cleanName string, err error) {
-	if header.Typeflag != tar.TypeReg {
+	if header.Typeflag != tar.TypeReg && header.Typeflag != tar.TypeDir {
 		return "", fmt.Errorf("non-regular file type %c: %s", header.Typeflag, header.Name)
 	}
 
