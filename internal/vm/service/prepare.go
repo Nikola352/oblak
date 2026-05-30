@@ -35,6 +35,10 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
 
 	objectName := generatePrepareObjectName(msg.FunctionId)
+	err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusExecuting)
+	if err != nil {
+		return err
+	}
 	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName, objectName); err != nil {
 		var userErr *vm.UserError
 		if errors.As(err, &userErr) {
@@ -42,11 +46,19 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 			if dbErr := s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusFailed); dbErr != nil {
 				log.Printf("failed to set failed status after failed prepare: %v", dbErr)
 			}
+			err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusFailed)
+			if err != nil {
+				return err
+			}
 			return nil // ack
 		}
 		log.Printf("environment prepare: %v", err)
 		if dbErr := s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusVerified); dbErr != nil {
 			log.Printf("failed to reset status after prepare error: %v", dbErr)
+		}
+		err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusFailed)
+		if err != nil {
+			return err
 		}
 		return err
 	}
