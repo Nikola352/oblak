@@ -3,6 +3,7 @@ package agent
 import (
 	"errors"
 	"oblak/internal/agentproto"
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -15,6 +16,12 @@ func (j *BuildJob) Run(conn *agentproto.Conn) error {
 
 	if err := j.mountDrives(); err != nil {
 		return err
+	}
+
+	_, err := os.Stat("/app/requirements.txt")
+	if err != nil && errors.Is(err, os.ErrNotExist) {
+		e.emit("system", "No requirements.txt, skipping pip install...")
+		_ = conn.Send(agentproto.Done(0))
 	}
 
 	cmd := exec.Command(
