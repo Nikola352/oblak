@@ -10,7 +10,6 @@ import (
 	"oblak/internal/invocation"
 	"oblak/internal/vm/service"
 	"strings"
-	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
 )
@@ -38,13 +37,7 @@ func (h *BuildHandler) Handle(msg *message.Message) error {
 		msg.Ack()
 		return nil
 	}
-	inv, err := h.invocationStore.CreateInvocation(msg.Context(), m.FunctionId, time.Now())
-	if err != nil {
-		msg.Ack()
-		log.Printf("Failed to create message: %v", err)
-		return err
-	}
-	if err := h.service.Prepare(msg.Context(), m, inv); err != nil {
+	if err := h.service.Prepare(msg.Context(), m); err != nil {
 		log.Printf("failed to prepare environment: %v", err)
 		return err
 	}

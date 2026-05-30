@@ -38,11 +38,7 @@ func main() {
 	functionStore := function.NewStore(db)
 	invocationStore := invocation.NewStore(db)
 
-	buildService := service.NewEnvironmentPrepareService(
-		functionStore,
-		invocationStore,
-		vm.NewEnvironmentPrepareRunner(minioClient),
-	)
+	buildService := service.NewEnvironmentPrepareService(functionStore, vm.NewEnvironmentPrepareRunner(minioClient))
 	executeService := service.NewExecutionService(
 		invocationStore,
 		vm.NewExecutionRunner(minioClient),

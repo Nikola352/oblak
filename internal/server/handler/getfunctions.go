@@ -11,7 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (h *Handler) GetUserFunctions(ctx context.Context, request api.GetUserFunctionsRequestObject) (api.GetUserFunctionsResponseObject, error) {
+func (h *Handler) GetUserFunctions(ctx context.Context, _ api.GetUserFunctionsRequestObject) (api.GetUserFunctionsResponseObject, error) {
 	ginCtx, ok := ctx.(*gin.Context)
 	if !ok {
 		return nil, fmt.Errorf("failed to get gin context")

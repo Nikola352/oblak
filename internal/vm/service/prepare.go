@@ -6,24 +6,21 @@ import (
 	"fmt"
 	"log"
 	"oblak/internal/function"
-	"oblak/internal/invocation"
 	"oblak/internal/vm/vm"
-	"time"
 
 	"github.com/google/uuid"
 )
 
 type EnvironmentPrepareService struct {
-	functionStore   *function.Store
-	invocationStore *invocation.Store
-	runner          *vm.EnvironmentPrepareRunner
+	functionStore *function.Store
+	runner        *vm.EnvironmentPrepareRunner
 }
 
-func NewEnvironmentPrepareService(functionStore *function.Store, invocationStore *invocation.Store, runner *vm.EnvironmentPrepareRunner) *EnvironmentPrepareService {
-	return &EnvironmentPrepareService{functionStore, invocationStore, runner}
+func NewEnvironmentPrepareService(functionStore *function.Store, runner *vm.EnvironmentPrepareRunner) *EnvironmentPrepareService {
+	return &EnvironmentPrepareService{functionStore, runner}
 }
 
-func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessage, inv invocation.Invocation) error {
+func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessage) error {
 	claimed, err := s.functionStore.UpdateFunctionStatusIf(ctx, msg.FunctionId, function.StatusVerified, function.StatusPreparingEnvironment)
 	if err != nil {
 		return err
@@ -35,10 +32,6 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
 
 	objectName := generatePrepareObjectName(msg.FunctionId)
-	err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusExecuting)
-	if err != nil {
-		return err
-	}
 	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName, objectName); err != nil {
 		var userErr *vm.UserError
 		if errors.As(err, &userErr) {
@@ -46,34 +39,18 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 			if dbErr := s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusFailed); dbErr != nil {
 				log.Printf("failed to set failed status after failed prepare: %v", dbErr)
 			}
-			err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusFailed)
-			if err != nil {
-				return err
-			}
 			return nil // ack
 		}
 		log.Printf("environment prepare: %v", err)
 		if dbErr := s.functionStore.UpdateFunctionStatus(ctx, msg.FunctionId, function.StatusVerified); dbErr != nil {
 			log.Printf("failed to reset status after prepare error: %v", dbErr)
 		}
-		err = s.invocationStore.UpdateInvocationStatus(ctx, inv.InvocationId, invocation.StatusFailed)
-		if err != nil {
-			return err
-		}
 		return err
 	}
-
 	if err = s.functionStore.UpdateFunctionStatusAndDrivePath(ctx, msg.FunctionId, function.StatusReady, driveObjectName); err != nil {
 		log.Printf("failed to write status to db: %v", err)
 		return err
 	}
-	currentTime := time.Now()
-	log.Println(objectName)
-	err = s.invocationStore.UpdateInvocationStatusAndLogPathAndEndTime(ctx, inv.InvocationId, invocation.StatusDone, objectName, currentTime)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
