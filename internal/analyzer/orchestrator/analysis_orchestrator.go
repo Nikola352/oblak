@@ -42,7 +42,6 @@ func NewOrchestrator(av av.Antivirus, llm llm.JudgeLLM, analyzer sast.StaticAnal
 }
 
 func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string, functionId uuid.UUID) (AnalysisVerdict, error) {
-	return SAFE, nil
 
 	log.Printf("Processing file from queue: %s", fileName)
 	functionIdString := functionId.String()
