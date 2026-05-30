@@ -11,14 +11,20 @@ import (
 )
 
 type EnvironmentPrepareRunner struct {
-	filestore *minio.Client
+	filestore   *minio.Client
+	logStreamer *InvocationLogStreamer
 }
 
-func NewEnvironmentPrepareRunner(filestore *minio.Client) *EnvironmentPrepareRunner {
-	return &EnvironmentPrepareRunner{filestore}
+func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner {
+	bucketRegistry := filestore.NewBucketRegistry()
+	bucketName := bucketRegistry.Name(filestore.LogsBucket)
+	return &EnvironmentPrepareRunner{
+		filestore:   client,
+		logStreamer: NewInvocationLogStreamer(client, bucketName),
+	}
 }
 
-func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -66,18 +72,14 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 		return err
 	}
 
-	var isSuccessful = false
-	for {
-		msg, err := conn.Receive()
-		if err != nil {
-			return err
-		}
-		log.Println(msg) // TODO: stream outputs to minio
-		if msg.Type == agentproto.TypeDone || msg.Type == agentproto.TypeError {
-			isSuccessful = msg.Type == agentproto.TypeDone && *msg.ExitCode == 0
-			break
-		}
+	finalMsg, err := ep.logStreamer.Stream(ctx, logsObjectName, conn)
+	if err != nil {
+		return fmt.Errorf("failed during build stream logging: %w", err)
 	}
+
+	// Compute build success using the final execution message
+	isSuccessful := finalMsg.Type == agentproto.TypeDone && finalMsg.ExitCode != nil && *finalMsg.ExitCode == 0
+	// ---------------------------------------------
 
 	if err = m.Stop(); err != nil {
 		log.Printf("failed to stop vm %s: %v", m.Id, err)
@@ -85,6 +87,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	if isSuccessful {
 		err = depsDrive.Save()
+
 		if err != nil {
 			return fmt.Errorf("failed to upload prepared env to minio: %v\n", err)
 		}
