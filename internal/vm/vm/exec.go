@@ -64,7 +64,6 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	defer m.CleanUpDrives()
 
 	log.Printf("Log available at: %s\n", m.LogPath)
-	log.Printf("Log about to start 1")
 
 	rawConn, err := m.Connect()
 	if err != nil {
@@ -74,7 +73,6 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	defer func(conn *agentproto.Conn) {
 		_ = conn.Close()
 	}(conn)
-	log.Printf("Log about to start")
 
 	if err = conn.Send(agentproto.Exec()); err != nil {
 		return err

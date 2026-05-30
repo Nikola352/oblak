@@ -24,7 +24,7 @@ func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner
 	}
 }
 
-func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, objectName string) (err error) {
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -72,7 +72,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 		return err
 	}
 
-	finalMsg, err := ep.logStreamer.Stream(ctx, objectName, conn)
+	finalMsg, err := ep.logStreamer.Stream(ctx, logsObjectName, conn)
 	if err != nil {
 		return fmt.Errorf("failed during build stream logging: %w", err)
 	}

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"oblak/internal/agentproto" // Ensure this is imported
+	"oblak/internal/agentproto"
 
 	"github.com/minio/minio-go/v7"
 )
