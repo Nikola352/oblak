@@ -69,8 +69,6 @@ func uploadFile(path string, profile cliconfig.Profile) error {
 		return fmt.Errorf("creating request body: %w", err)
 	}
 
-	// CONVERTING TO MULTIPART BECAUSE ENDPOINT EXPECTS IT THIS IS NOT BEST WAY
-	// TODO instead of multipart form data send application/zip data
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
 
