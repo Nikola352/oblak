@@ -96,7 +96,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 		err = depsDrive.Save()
 
 		if err != nil {
-			return fmt.Errorf("failed to upload prepared env to minio: %v\n", err)
+			return fmt.Errorf("failed to upload prepared env to minio: %v", err)
 		}
 	} else {
 		return &UserError{reason: "failed to install dependencies (non-zero exit code)"}

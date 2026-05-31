@@ -31,13 +31,20 @@ func (a *ClamAV) ScanLocalPath(path string) (bool, error) {
 
 	// Read results stream from the channel
 	for result := range results {
-		if result.Status == clamd.RES_FOUND {
-			log.Printf("[CLAMAV] Thread flagged virus! File: %s | Threat: %s", result.Path, result.Description)
-			isClean = false
-			// MultiScan automatically targets an early termination internally upon threats
-		} else if result.Status == clamd.RES_ERROR {
-			return false, fmt.Errorf("[CLAMAV] engine thread failure on file %s: %s", result.Path, result.Description)
+		switch result.Status {
+		case clamd.RES_FOUND:
+			{
+				log.Printf("[CLAMAV] Thread flagged virus! File: %s | Threat: %s", result.Path, result.Description)
+
+				isClean = false
+				break
+			}
+		case clamd.RES_ERROR:
+			{
+				return false, fmt.Errorf("[CLAMAV] engine thread failure on file %s: %s", result.Path, result.Description)
+			}
 		}
+
 	}
 
 	if !isClean {
@@ -53,17 +60,36 @@ func (a *ClamAV) ScanStream(ctx context.Context, reader io.Reader) (bool, error)
 	if err != nil {
 		return false, fmt.Errorf("[CLAMAV] failed to initiate scan: %w", err)
 	}
+	var isClean bool
+	var scanErr error
+	var statusFound bool
 	for result := range results {
-		if result.Status == clamd.RES_OK {
+		if statusFound {
+			continue
+		}
+
+		switch result.Status {
+		case clamd.RES_OK:
 			log.Println("[CLAMAV] File looks clean")
-			return true, nil // Clean
-		} else if result.Status == clamd.RES_FOUND {
+			isClean = true
+			statusFound = true
+
+		case clamd.RES_ERROR:
+			scanErr = fmt.Errorf("[CLAMAV] error: %s", result.Description)
+			statusFound = true
+
+		case clamd.RES_FOUND:
 			log.Printf("[CLAMAV] Virus detected! Description: %s", result.Description)
-			return false, nil // Infected
-		} else if result.Status == clamd.RES_ERROR {
-			return false, fmt.Errorf("[CLAMAV] error: %s", result.Description)
+			isClean = false
+			statusFound = true
 		}
 	}
+	if !statusFound {
+		return false, fmt.Errorf("[CLAMAV] scan finished without returning a valid status")
+	}
+	if scanErr != nil {
+		return false, scanErr
+	}
 
-	return false, fmt.Errorf("[CLAMAV] scan finished without returning a valid status")
+	return isClean, nil
 }

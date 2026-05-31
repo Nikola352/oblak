@@ -174,7 +174,10 @@ Respond ONLY with the word 'MALICIOUS' if it is exploitable, or 'SAFE' if it is 
 	var res struct {
 		Response string `json:"response"`
 	}
-	json.NewDecoder(resp.Body).Decode(&res)
+	err = json.NewDecoder(resp.Body).Decode(&res)
+	if err != nil {
+		return FAILURE, err
+	}
 
 	var verdictResult = SAFE
 	log.Println(res.Response)
