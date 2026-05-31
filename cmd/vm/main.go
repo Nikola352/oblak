@@ -47,7 +47,7 @@ func main() {
 	buildHandler := queue.NewBuildHandler(buildService, invocationStore)
 	executeHandler := queue.NewExecuteHandler(executeService, invocationStore)
 
-	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, functionStore)
+	router, err := queue.NewVmRouter(*cfg, buildHandler, executeHandler, functionStore, invocationStore)
 	if err != nil {
 		log.Fatalf("router setup: %v", err)
 	}

@@ -21,7 +21,10 @@ func (j *BuildJob) Run(conn *agentproto.Conn) error {
 	_, err := os.Stat("/app/requirements.txt")
 	if err != nil && errors.Is(err, os.ErrNotExist) {
 		e.emit("system", "No requirements.txt, skipping pip install...")
+		j.unmountDrives()
+		syscall.Sync()
 		_ = conn.Send(agentproto.Done(0))
+		return nil
 	}
 
 	cmd := exec.Command(
@@ -77,7 +80,7 @@ func (j *BuildJob) mountDrives() error {
 
 func (j *BuildJob) unmountDrives() {
 	for _, target := range []string{"/app", "/deps"} {
-		if err := syscall.Unmount(target, syscall.MNT_DETACH); err != nil {
+		if err := syscall.Unmount(target, 0); err != nil {
 			WriteErr("unmount "+target, err)
 		}
 	}

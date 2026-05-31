@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"oblak/internal/function"
+	"oblak/internal/invocation"
 	"oblak/internal/vm/config"
 	"time"
 
@@ -14,12 +15,13 @@ import (
 )
 
 type VmRouter struct {
-	router       *message.Router
-	dlqPublisher message.Publisher
+	router          *message.Router
+	dlqPublisher    message.Publisher
+	exeDLQPublisher message.Publisher
 }
 
-func NewVmRouter(cfg config.Config, build *BuildHandler, execute *ExecuteHandler, store *function.Store) (*VmRouter, error) {
-	logger := watermill.NewStdLogger(true, false)
+func NewVmRouter(cfg config.Config, build *BuildHandler, execute *ExecuteHandler, store *function.Store, invocationStore *invocation.Store) (*VmRouter, error) {
+	logger := watermill.NopLogger{}
 
 	baseDLQPublisher, err := amqp.NewPublisher(PublisherConfig(cfg), logger)
 	if err != nil {
@@ -33,9 +35,24 @@ func NewVmRouter(cfg config.Config, build *BuildHandler, execute *ExecuteHandler
 		return nil, fmt.Errorf("poison queue middleware: %w", err)
 	}
 
+	baseExeDLQPublisher, err := amqp.NewPublisher(PublisherConfig(cfg), logger)
+	if err != nil {
+		_ = dlqPublisher.Close()
+		return nil, fmt.Errorf("execute dlq publisher: %w", err)
+	}
+	exeDLQPublisher := &executeStatusFailPublisher{base: baseExeDLQPublisher, store: invocationStore}
+
+	executePoisonMiddleware, err := middleware.PoisonQueue(exeDLQPublisher, cfg.ExecuteDLQName)
+	if err != nil {
+		_ = dlqPublisher.Close()
+		_ = exeDLQPublisher.Close()
+		return nil, fmt.Errorf("execute poison queue middleware: %w", err)
+	}
+
 	router, err := message.NewRouter(message.RouterConfig{}, logger)
 	if err != nil {
 		_ = dlqPublisher.Close()
+		_ = exeDLQPublisher.Close()
 		return nil, fmt.Errorf("router: %w", err)
 	}
 
@@ -54,6 +71,7 @@ func NewVmRouter(cfg config.Config, build *BuildHandler, execute *ExecuteHandler
 		sub, err := amqp.NewSubscriber(PrepareEnvConsumerConfig(cfg), logger)
 		if err != nil {
 			_ = dlqPublisher.Close()
+			_ = exeDLQPublisher.Close()
 			_ = router.Close()
 			return nil, fmt.Errorf("build subscriber: %w", err)
 		}
@@ -65,13 +83,15 @@ func NewVmRouter(cfg config.Config, build *BuildHandler, execute *ExecuteHandler
 		sub, err := amqp.NewSubscriber(ExecuteConsumerConfig(cfg), logger)
 		if err != nil {
 			_ = dlqPublisher.Close()
+			_ = exeDLQPublisher.Close()
 			_ = router.Close()
 			return nil, fmt.Errorf("execute subscriber: %w", err)
 		}
-		router.AddConsumerHandler(fmt.Sprintf("execute-%d", i), cfg.ExecuteQueueName, sub, execute.Handle)
+		h := router.AddConsumerHandler(fmt.Sprintf("execute-%d", i), cfg.ExecuteQueueName, sub, execute.Handle)
+		h.AddMiddleware(executePoisonMiddleware)
 	}
 
-	return &VmRouter{router: router, dlqPublisher: dlqPublisher}, nil
+	return &VmRouter{router: router, dlqPublisher: dlqPublisher, exeDLQPublisher: exeDLQPublisher}, nil
 }
 
 func (r *VmRouter) Run(ctx context.Context) error {
@@ -80,5 +100,6 @@ func (r *VmRouter) Run(ctx context.Context) error {
 
 func (r *VmRouter) Close() error {
 	_ = r.dlqPublisher.Close()
+	_ = r.exeDLQPublisher.Close()
 	return r.router.Close()
 }

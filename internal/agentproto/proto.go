@@ -37,8 +37,11 @@ func Build() Message {
 	return Message{Type: TypeBuild}
 }
 
-func Exec() Message {
-	return Message{Type: TypeExec}
+func Exec(payload string) Message {
+	return Message{
+		Type: TypeExec,
+		Data: payload,
+	}
 }
 
 func Output(channel, data string) Message {

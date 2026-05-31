@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"oblak/internal/agentproto"
 	"os"
@@ -10,7 +12,7 @@ import (
 
 type ExecJob struct{}
 
-func (j *ExecJob) Run(conn *agentproto.Conn) error {
+func (j *ExecJob) Run(conn *agentproto.Conn, payload string) error {
 	e := newEmitter(conn)
 	e.emit("system", "Execution started")
 
@@ -18,7 +20,17 @@ func (j *ExecJob) Run(conn *agentproto.Conn) error {
 		return err
 	}
 
-	code := "import handler; handler.handle('hello!')"
+	if err := validatePayload(payload); err != nil {
+		WriteErr("the payload is not valid json", err)
+		e.emit("system", "The payload is not valid json")
+		j.unmountDrives()
+		syscall.Sync()
+		_ = conn.Send(agentproto.Done(0))
+		return nil
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(payload))
+	code := "import base64,json,handler; handler.handle(json.loads(base64.b64decode('" + encoded + "')))"
+
 	cmd := exec.Command("python3", "-c", code)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = append(os.Environ(), "PYTHONPATH=/deps")
@@ -41,6 +53,13 @@ func (j *ExecJob) Run(conn *agentproto.Conn) error {
 	j.cleanUp(cmd)
 	_ = conn.Send(agentproto.Done(0))
 
+	return nil
+}
+
+func validatePayload(payload string) error {
+	if !json.Valid([]byte(payload)) {
+		return errors.New("payload is not valid JSON")
+	}
 	return nil
 }
 

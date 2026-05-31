@@ -35,7 +35,7 @@ func ListenForCommands() error {
 	case agentproto.TypeExec:
 		WriteLog("Starting execution...")
 		job := ExecJob{}
-		if err = job.Run(conn); err != nil {
+		if err = job.Run(conn, msg.Data); err != nil {
 			WriteErr("execution failed", err)
 		}
 	case agentproto.TypeBuild:

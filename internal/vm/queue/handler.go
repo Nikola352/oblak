@@ -101,6 +101,27 @@ func (p *statusFailPublisher) Close() error {
 	return p.base.Close()
 }
 
+type executeStatusFailPublisher struct {
+	base  message.Publisher
+	store *invocation.Store
+}
+
+func (p *executeStatusFailPublisher) Publish(topic string, messages ...*message.Message) error {
+	for _, msg := range messages {
+		var m service.ExecuteMessage
+		if err := decodePayload(msg.Payload, &m); err == nil {
+			if dbErr := p.store.UpdateInvocationStatus(msg.Context(), m.InvocationId, invocation.StatusFailed); dbErr != nil {
+				log.Printf("dlq: failed to update invocation status to failed: %v", dbErr)
+			}
+		}
+	}
+	return p.base.Publish(topic, messages...)
+}
+
+func (p *executeStatusFailPublisher) Close() error {
+	return p.base.Close()
+}
+
 func decodePayload(payload []byte, dst any) error {
 	if len(payload) > maxPayloadBytes {
 		return fmt.Errorf("payload too large: %d bytes", len(payload))
