@@ -92,8 +92,10 @@ func parseAuthHeader(header string) (credential, signature string, err error) {
 }
 
 func isPublic(path string) bool {
-	switch path {
-	case "/health":
+	switch {
+	case path == "/health":
+		return true
+	case strings.HasPrefix(path, "/execute/"):
 		return true
 	default:
 		return false
