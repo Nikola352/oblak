@@ -26,5 +26,6 @@ func New(functionStore *function.Store, invocationStore *invocation.Store, invoc
 		filestore:          filestore,
 		invocationLogStore: invocationLogStore,
 		quarantineBus:      quarantineBus,
-		extractionBus:      extractionBus}
+		extractionBus:      extractionBus,
+	}
 }
