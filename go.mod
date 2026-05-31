@@ -18,6 +18,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/rabbitmq/amqp091-go v1.11.0
 	github.com/spf13/cobra v1.10.2
+	github.com/ulule/limiter/v3 v3.11.2
 	golang.org/x/sys v0.44.0
 )
 

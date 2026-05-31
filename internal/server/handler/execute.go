@@ -12,10 +12,6 @@ import (
 )
 
 func (h *Handler) ExecuteLambda(ctx context.Context, request api.ExecuteLambdaRequestObject) (api.ExecuteLambdaResponseObject, error) {
-	// rate limiting token bucket
-	if !h.tokenBucket.CheckTokenCondition() {
-		return nil, fmt.Errorf("execution rate limit exceeded")
-	}
 	functionId, err := uuid.Parse(request.FunctionId)
 	if err != nil {
 		return nil, fmt.Errorf("function_id is not valid UUID")
