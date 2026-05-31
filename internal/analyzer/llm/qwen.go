@@ -74,7 +74,7 @@ Target Sandbox Execution Logs:
 
 You must output exactly this JSON schema format:
 {
-  "verdict": "SAFE|SUSPICIOUS|MALICIOUS",
+  "verdict": "SAFE|SUSPICIOUS|MALICIOUS" only one of these, no other variations,
   "confidence_score": (how confident you are in your verdict),
   "summary": "Factual explanation based strictly on visible log entries."
 }`

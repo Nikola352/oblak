@@ -106,7 +106,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 				continue
 			}
 			if verdict == llm.MALICIOUS {
-				return MALICIOUS, errors.New("LLM Agent flagged the code as malicious, stopping investigation")
+				return MALICIOUS, nil
 			}
 		}
 	}
