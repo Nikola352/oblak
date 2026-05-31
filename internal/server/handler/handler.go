@@ -5,7 +5,6 @@ import (
 	"oblak/internal/invocation"
 	"oblak/internal/server/events"
 	"oblak/internal/server/invocations"
-	"oblak/internal/server/ratelimiter"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -17,11 +16,10 @@ type Handler struct {
 	quarantineBus      *events.Bus[events.QuarantineEvent]
 	extractionBus      *events.Bus[events.ExtractionEvent]
 	invocationLogStore *invocations.InvocationLogStore
-	tokenBucket        *ratelimiter.TokenBucket
 }
 
 func New(functionStore *function.Store, invocationStore *invocation.Store, invocationLogStore *invocations.InvocationLogStore, filestore *minio.Client, quarantineBus *events.Bus[events.QuarantineEvent],
-	extractionBus *events.Bus[events.ExtractionEvent], tokenBucket *ratelimiter.TokenBucket) *Handler {
+	extractionBus *events.Bus[events.ExtractionEvent]) *Handler {
 	return &Handler{
 		functionStore:      functionStore,
 		invocationStore:    invocationStore,
@@ -29,6 +27,5 @@ func New(functionStore *function.Store, invocationStore *invocation.Store, invoc
 		invocationLogStore: invocationLogStore,
 		quarantineBus:      quarantineBus,
 		extractionBus:      extractionBus,
-		tokenBucket:        tokenBucket,
 	}
 }
