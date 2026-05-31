@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -41,6 +42,11 @@ func (e LogLineStream) Valid() bool {
 // Error defines model for Error.
 type Error struct {
 	Error string `json:"error"`
+}
+
+// ExecuteResponse defines model for ExecuteResponse.
+type ExecuteResponse struct {
+	Status string `json:"status"`
 }
 
 // FunctionEntity defines model for FunctionEntity.
@@ -93,11 +99,17 @@ type BadRequest = Error
 // NotFound defines model for NotFound.
 type NotFound = Error
 
+// ExecuteLambdaJSONBody defines parameters for ExecuteLambda.
+type ExecuteLambdaJSONBody = interface{}
+
 // UploadLambdaMultipartBody defines parameters for UploadLambda.
 type UploadLambdaMultipartBody struct {
 	// Function The function archive file (tar.gz, tar.xz, or zip)
 	Function openapi_types.File `json:"function"`
 }
+
+// ExecuteLambdaJSONRequestBody defines body for ExecuteLambda for application/json ContentType.
+type ExecuteLambdaJSONRequestBody = ExecuteLambdaJSONBody
 
 // UploadLambdaMultipartRequestBody defines body for UploadLambda for multipart/form-data ContentType.
 type UploadLambdaMultipartRequestBody UploadLambdaMultipartBody
@@ -175,6 +187,11 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ExecuteLambdaWithBody request with any body
+	ExecuteLambdaWithBody(ctx context.Context, functionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ExecuteLambda(ctx context.Context, functionId string, body ExecuteLambdaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetFunctionInvocations request
 	GetFunctionInvocations(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -189,6 +206,30 @@ type ClientInterface interface {
 
 	// UploadLambdaWithBody request with any body
 	UploadLambdaWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ExecuteLambdaWithBody(ctx context.Context, functionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExecuteLambdaRequestWithBody(c.Server, functionId, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ExecuteLambda(ctx context.Context, functionId string, body ExecuteLambdaJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewExecuteLambdaRequest(c.Server, functionId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) GetFunctionInvocations(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -249,6 +290,53 @@ func (c *Client) UploadLambdaWithBody(ctx context.Context, contentType string, b
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewExecuteLambdaRequest calls the generic ExecuteLambda builder with application/json body
+func NewExecuteLambdaRequest(server string, functionId string, body ExecuteLambdaJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewExecuteLambdaRequestWithBody(server, functionId, "application/json", bodyReader)
+}
+
+// NewExecuteLambdaRequestWithBody generates requests for ExecuteLambda with any type of body
+func NewExecuteLambdaRequestWithBody(server string, functionId string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "functionId", functionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/execute/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewGetFunctionInvocationsRequest generates requests for GetFunctionInvocations
@@ -445,6 +533,11 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ExecuteLambdaWithBodyWithResponse request with any body
+	ExecuteLambdaWithBodyWithResponse(ctx context.Context, functionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ExecuteLambdaResponse, error)
+
+	ExecuteLambdaWithResponse(ctx context.Context, functionId string, body ExecuteLambdaJSONRequestBody, reqEditors ...RequestEditorFn) (*ExecuteLambdaResponse, error)
+
 	// GetFunctionInvocationsWithResponse request
 	GetFunctionInvocationsWithResponse(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetFunctionInvocationsResponse, error)
 
@@ -459,6 +552,36 @@ type ClientWithResponsesInterface interface {
 
 	// UploadLambdaWithBodyWithResponse request with any body
 	UploadLambdaWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadLambdaResponse, error)
+}
+
+type ExecuteLambdaResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ExecuteResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ExecuteLambdaResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ExecuteLambdaResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r ExecuteLambdaResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
 }
 
 type GetFunctionInvocationsResponse struct {
@@ -617,6 +740,23 @@ func (r UploadLambdaResponse) ContentType() string {
 	return ""
 }
 
+// ExecuteLambdaWithBodyWithResponse request with arbitrary body returning *ExecuteLambdaResponse
+func (c *ClientWithResponses) ExecuteLambdaWithBodyWithResponse(ctx context.Context, functionId string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ExecuteLambdaResponse, error) {
+	rsp, err := c.ExecuteLambdaWithBody(ctx, functionId, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExecuteLambdaResponse(rsp)
+}
+
+func (c *ClientWithResponses) ExecuteLambdaWithResponse(ctx context.Context, functionId string, body ExecuteLambdaJSONRequestBody, reqEditors ...RequestEditorFn) (*ExecuteLambdaResponse, error) {
+	rsp, err := c.ExecuteLambda(ctx, functionId, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseExecuteLambdaResponse(rsp)
+}
+
 // GetFunctionInvocationsWithResponse request returning *GetFunctionInvocationsResponse
 func (c *ClientWithResponses) GetFunctionInvocationsWithResponse(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetFunctionInvocationsResponse, error) {
 	rsp, err := c.GetFunctionInvocations(ctx, functionId, reqEditors...)
@@ -660,6 +800,32 @@ func (c *ClientWithResponses) UploadLambdaWithBodyWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseUploadLambdaResponse(rsp)
+}
+
+// ParseExecuteLambdaResponse parses an HTTP response from a ExecuteLambdaWithResponse call
+func ParseExecuteLambdaResponse(rsp *http.Response) (*ExecuteLambdaResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ExecuteLambdaResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ExecuteResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseGetFunctionInvocationsResponse parses an HTTP response from a GetFunctionInvocationsWithResponse call
@@ -836,6 +1002,9 @@ func ParseUploadLambdaResponse(rsp *http.Response) (*UploadLambdaResponse, error
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+
+	// (POST /execute/{functionId})
+	ExecuteLambda(c *gin.Context, functionId string)
 	// Get invocation history for a specific function ordered from newest to oldest
 	// (GET /functions/{function_id}/invocations)
 	GetFunctionInvocations(c *gin.Context, functionId openapi_types.UUID)
@@ -861,6 +1030,31 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(c *gin.Context)
+
+// ExecuteLambda operation middleware
+func (siw *ServerInterfaceWrapper) ExecuteLambda(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "functionId" -------------
+	var functionId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "functionId", c.Param("functionId"), &functionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter functionId: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.ExecuteLambda(c, functionId)
+}
 
 // GetFunctionInvocations operation middleware
 func (siw *ServerInterfaceWrapper) GetFunctionInvocations(c *gin.Context) {
@@ -978,6 +1172,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
+	router.POST(options.BaseURL+"/execute/:functionId", wrapper.ExecuteLambda)
 	router.GET(options.BaseURL+"/functions/:function_id/invocations", wrapper.GetFunctionInvocations)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.GET(options.BaseURL+"/invocations/:invocation_id", wrapper.GetInvocationDetails)
@@ -988,6 +1183,29 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 type BadRequestJSONResponse Error
 
 type NotFoundJSONResponse Error
+
+type ExecuteLambdaRequestObject struct {
+	FunctionId string `json:"functionId"`
+	Body       *ExecuteLambdaJSONRequestBody
+}
+
+type ExecuteLambdaResponseObject interface {
+	VisitExecuteLambdaResponse(w http.ResponseWriter) error
+}
+
+type ExecuteLambda200JSONResponse ExecuteResponse
+
+func (response ExecuteLambda200JSONResponse) VisitExecuteLambdaResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
 
 type GetFunctionInvocationsRequestObject struct {
 	FunctionId openapi_types.UUID `json:"function_id"`
@@ -1183,6 +1401,9 @@ func (response UploadLambda200JSONResponse) VisitUploadLambdaResponse(w http.Res
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+
+	// (POST /execute/{functionId})
+	ExecuteLambda(ctx context.Context, request ExecuteLambdaRequestObject) (ExecuteLambdaResponseObject, error)
 	// Get invocation history for a specific function ordered from newest to oldest
 	// (GET /functions/{function_id}/invocations)
 	GetFunctionInvocations(ctx context.Context, request GetFunctionInvocationsRequestObject) (GetFunctionInvocationsResponseObject, error)
@@ -1255,6 +1476,42 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictGinServerOptions
+}
+
+// ExecuteLambda operation middleware
+func (sh *strictHandler) ExecuteLambda(ctx *gin.Context, functionId string) {
+	var request ExecuteLambdaRequestObject
+
+	request.FunctionId = functionId
+
+	var body ExecuteLambdaJSONRequestBody
+	if err := ctx.ShouldBindJSON(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(ctx, err)
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.ExecuteLambda(ctx, request.(ExecuteLambdaRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ExecuteLambda")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(ExecuteLambdaResponseObject); ok {
+		if err := validResponse.VisitExecuteLambdaResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // GetFunctionInvocations operation middleware

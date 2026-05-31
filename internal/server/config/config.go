@@ -1,6 +1,8 @@
 package config
 
-import "os"
+import (
+	"os"
+)
 
 type Config struct {
 	Port             string
@@ -11,6 +13,8 @@ type Config struct {
 	MinioSecretKey   string
 	MinioUseSSL      bool
 	KeyEncryptionKey string
+	MaxTokenSize     string
+	TimeInterval     string
 }
 
 func Load() *Config {
@@ -23,6 +27,8 @@ func Load() *Config {
 		MinioSecretKey:   getEnv("MINIO_SECRET_KEY", "minioadmin"),
 		MinioUseSSL:      getEnv("MINIO_USE_SSL", "false") == "true",
 		KeyEncryptionKey: getEnv("KEY_ENCRYPTION_KEY", "secret-key"),
+		MaxTokenSize:     getEnv("MAX_TOKEN_SIZE", "10"),
+		TimeInterval:     getEnv("TIME_INTERVAL", "S"),
 	}
 }
 

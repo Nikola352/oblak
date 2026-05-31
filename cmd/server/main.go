@@ -57,7 +57,8 @@ func main() {
 	if err := bucketInitializer.InitializeBuckets(ctx); err != nil {
 		log.Fatalf("Failed to initialize buckets: %v", err)
 	}
-	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus, functionStore, invocationStore, invocationLogStore)
+	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus,
+		functionStore, invocationStore, invocationLogStore, cfg)
 	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
 	}

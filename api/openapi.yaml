@@ -92,6 +92,20 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - function
+              properties:
+                function:
+                  type: string
+                  format: binary
+                  description: The function archive file (tar.gz, tar.xz, or zip)
+
       responses:
         "200":
           description: Invocation details with execution logs
@@ -103,6 +117,27 @@ paths:
           $ref: '#/components/responses/BadRequest'
         "404":
           $ref: '#/components/responses/NotFound'
+  /execute/{functionId}:
+    post:
+      operationId: ExecuteLambda
+      parameters:
+        - name: functionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: {}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
 
 components:
   schemas:
@@ -194,6 +229,13 @@ components:
       properties:
         status:
           type: string
+    ExecuteResponse:
+      type: object
+      required: [ status ]
+      properties:
+        status:
+          type: string
+
     Error:
       type: object
       required: [error]

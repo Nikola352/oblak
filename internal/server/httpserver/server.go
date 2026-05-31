@@ -3,6 +3,7 @@ package httpserver
 import (
 	"oblak/internal/function"
 	"oblak/internal/invocation"
+	"oblak/internal/server/config"
 	"oblak/internal/server/events"
 	"oblak/internal/server/invocations"
 
@@ -22,7 +23,8 @@ type Server struct {
 }
 
 func New(db *pgxpool.Pool, filestore *minio.Client, kek string, quarantineBus *events.Bus[events.QuarantineEvent],
-	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store, invocationStore *invocation.Store, invocationLogStore *invocations.InvocationLogStore) *Server {
+	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store, invocationStore *invocation.Store,
+	invocationLogStore *invocations.InvocationLogStore, cfg *config.Config) *Server {
 	s := &Server{
 		router:    gin.Default(),
 		db:        db,
@@ -30,7 +32,8 @@ func New(db *pgxpool.Pool, filestore *minio.Client, kek string, quarantineBus *e
 	}
 	h := handler.New(functionStore, invocationStore, invocationLogStore, filestore, quarantineBus, extractionBus)
 	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
-	s.registerRoutes(h, auth)
+	rateLimit := middleware.RateLimitByIP(cfg.MaxTokenSize, cfg.TimeInterval)
+	s.registerRoutes(h, rateLimit, auth)
 	return s
 }
 
