@@ -16,6 +16,7 @@ type Config struct {
 	BuildQueueName        string
 	BuildDLQName          string
 	ExecuteQueueName      string
+	ExecuteDLQName        string
 	MaxConcurrentBuilds   int
 	MaxConcurrentExecutes int
 	MaxConcurrentVMs      int
@@ -33,6 +34,7 @@ func Load() *Config {
 		BuildQueueName:        getEnv("BUILD_QUEUE_NAME", "build"),
 		BuildDLQName:          getEnv("BUILD_DLQ_NAME", "build_dlq"),
 		ExecuteQueueName:      getEnv("EXECUTE_QUEUE_NAME", "execute"),
+		ExecuteDLQName:        getEnv("EXECUTE_DLQ_NAME", "execute_dlq"),
 		MaxConcurrentBuilds:   getEnvInt("MAX_CONCURRENT_BUILDS", 3),
 		MaxConcurrentExecutes: getEnvInt("MAX_CONCURRENT_EXECUTES", 20),
 		MaxConcurrentVMs:      getEnvInt("MAX_CONCURRENT_VMS", 20),
