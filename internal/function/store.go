@@ -2,6 +2,8 @@ package function
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -67,4 +69,30 @@ func (s *Store) UpdateFunctionStatusAndDrivePath(ctx context.Context, functionId
 		return fmt.Errorf("update status function: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) CheckFunctionIdAndUserId(ctx context.Context, functionId uuid.UUID, userId uuid.UUID) (Function, error) {
+	var function Function
+
+	err := s.db.QueryRow(ctx,
+		`SELECT function_id, user_id, status, archive_path, drive_path
+		 FROM functions
+		 WHERE function_id = $1 AND user_id = $2`,
+		functionId, userId,
+	).Scan(
+		&function.FunctionId,
+		&function.UserId,
+		&function.Status,
+		&function.ArchivePath,
+		&function.DrivePath,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Function{}, fmt.Errorf("function not found")
+		}
+		return Function{}, fmt.Errorf("check function id: %w", err)
+	}
+
+	return function, nil
 }
