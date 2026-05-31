@@ -10,6 +10,8 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// InvocationLogStreamer reads messages from a VM agent connection and uploads
+// each log line to MinIO as a plain-text object.
 type InvocationLogStreamer struct {
 	minioClient *minio.Client
 	bucketName  string
@@ -21,6 +23,9 @@ func NewInvocationLogStreamer(client *minio.Client, bucketName string) *Invocati
 		bucketName:  bucketName,
 	}
 }
+
+// Stream reads messages from conn, writing each line to MinIO at objectName,
+// and returns the terminal Done/Error message.
 func (s *InvocationLogStreamer) Stream(ctx context.Context, objectName string, conn *agentproto.Conn) (*agentproto.Message, error) {
 	pr, pw := io.Pipe()
 	errChan := make(chan error, 1)

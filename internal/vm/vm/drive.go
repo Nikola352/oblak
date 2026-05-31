@@ -17,6 +17,8 @@ const (
 	driveDir    = jailerBase + "/drives"
 )
 
+// DriveMount bundles a Firecracker drive config with optional Save and Cleanup callbacks.
+// Save persists the drive's contents (e.g. upload to MinIO); Cleanup removes local temp files.
 type DriveMount struct {
 	Config  models.Drive
 	Save    func() error

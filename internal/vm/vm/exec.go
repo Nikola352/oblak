@@ -10,11 +10,13 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// ExecutionRunner boots a short-lived VM to run user code and stream its output to MinIO.
 type ExecutionRunner struct {
 	filestore   *minio.Client
 	logStreamer *InvocationLogStreamer
 }
 
+// NewExecutionRunner returns a runner backed by the given MinIO client.
 func NewExecutionRunner(minioClient *minio.Client) *ExecutionRunner {
 	bucketRegistry := filestore.NewBucketRegistry()
 	bucketName := bucketRegistry.Name(filestore.LogsBucket)
@@ -24,6 +26,8 @@ func NewExecutionRunner(minioClient *minio.Client) *ExecutionRunner {
 	}
 }
 
+// Execute boots a VM with code, dependency, and ephemeral tmp drives, runs the exec agent,
+// streams output to logsObjectName in MinIO, then shuts down the VM.
 func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {

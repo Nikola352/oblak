@@ -10,11 +10,13 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// EnvironmentPrepareRunner boots a short-lived VM to install dependencies and persist the resulting drive back to MinIO.
 type EnvironmentPrepareRunner struct {
 	filestore   *minio.Client
 	logStreamer *InvocationLogStreamer
 }
 
+// NewEnvironmentPrepareRunner returns a runner backed by the given MinIO client.
 func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner {
 	bucketRegistry := filestore.NewBucketRegistry()
 	bucketName := bucketRegistry.Name(filestore.LogsBucket)
@@ -24,6 +26,8 @@ func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner
 	}
 }
 
+// PrepareEnvironment boots a VM with the given code and dependency drives, runs the build
+// agent, streams output to logsObjectName, and on success uploads the prepared deps drive.
 func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
