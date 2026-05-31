@@ -10,6 +10,8 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// InvocationLogStreamer reads messages from a VM agent connection and uploads
+// each log line to MinIO as a plain-text object.
 type InvocationLogStreamer struct {
 	minioClient *minio.Client
 	bucketName  string
@@ -21,25 +23,38 @@ func NewInvocationLogStreamer(client *minio.Client, bucketName string) *Invocati
 		bucketName:  bucketName,
 	}
 }
+
+// Stream reads messages from conn, writing each line to MinIO at objectName,
+// and returns the terminal Done/Error message.
 func (s *InvocationLogStreamer) Stream(ctx context.Context, objectName string, conn *agentproto.Conn) (*agentproto.Message, error) {
 	pr, pw := io.Pipe()
 	errChan := make(chan error, 1)
 
 	go func() {
-		defer pr.Close()
+		defer func() { _ = pr.Close() }()
 		_, err := s.minioClient.PutObject(ctx, s.bucketName, objectName, pr, -1, minio.PutObjectOptions{
 			ContentType: "text/plain",
 		})
 		errChan <- err
 	}()
 
+	streamDone := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.Close()
+		case <-streamDone:
+		}
+	}()
+
 	var finalMsg *agentproto.Message
+	var streamErr error
 
 	for {
 		msg, err := conn.Receive()
 		if err != nil {
-			pw.CloseWithError(err)
-			return nil, fmt.Errorf("connection receive failed: %w", err)
+			streamErr = fmt.Errorf("connection receive failed: %w", err)
+			break
 		}
 
 		// Write log line to MinIO stream
@@ -55,7 +70,15 @@ func (s *InvocationLogStreamer) Stream(ctx context.Context, objectName string, c
 		}
 	}
 
-	pw.Close()
+	close(streamDone)
+
+	if streamErr != nil {
+		_ = pw.CloseWithError(streamErr)
+		<-errChan
+		return nil, streamErr
+	}
+
+	_ = pw.Close()
 
 	if err := <-errChan; err != nil {
 		return nil, fmt.Errorf("minio upload failed: %w", err)

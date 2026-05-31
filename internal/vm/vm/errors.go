@@ -1,6 +1,6 @@
 package vm
 
-// UserError represents a failure caused by user-provided code or configuration
+// UserError represents a failure caused by user-provided code or configuration.
 type UserError struct {
 	reason string
 }

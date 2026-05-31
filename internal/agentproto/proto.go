@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 )
+
+const MaxMessageSize = 1 << 20 // 1 MiB
 
 const (
 	TypeBuild  = "build"
@@ -51,12 +54,14 @@ func AgentError(msg string) Message {
 }
 
 type Conn struct {
-	conn net.Conn
-	r    *bufio.Reader
+	conn    net.Conn
+	scanner *bufio.Scanner
 }
 
 func NewConn(c net.Conn) *Conn {
-	return &Conn{conn: c, r: bufio.NewReader(c)}
+	s := bufio.NewScanner(c)
+	s.Buffer(make([]byte, MaxMessageSize), MaxMessageSize)
+	return &Conn{conn: c, scanner: s}
 }
 
 func (c *Conn) Send(m Message) error {
@@ -69,12 +74,14 @@ func (c *Conn) Send(m Message) error {
 }
 
 func (c *Conn) Receive() (Message, error) {
-	line, err := c.r.ReadBytes('\n')
-	if err != nil {
-		return Message{}, err
+	if !c.scanner.Scan() {
+		if err := c.scanner.Err(); err != nil {
+			return Message{}, err
+		}
+		return Message{}, io.EOF
 	}
 	var m Message
-	return m, json.Unmarshal(line, &m)
+	return m, json.Unmarshal(c.scanner.Bytes(), &m)
 }
 
 func (c *Conn) Close() error {

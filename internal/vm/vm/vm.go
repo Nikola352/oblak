@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	"oblak/internal/agentproto"
+
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/google/uuid"
@@ -35,6 +37,7 @@ const (
 	retryInterval  = 500 * time.Millisecond
 )
 
+// MicroVM is a handle to a running Firecracker microVM.
 type MicroVM struct {
 	Id            string
 	Cid           uint32
@@ -48,7 +51,9 @@ type MicroVM struct {
 	stopOnce      sync.Once
 }
 
-func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
+// StartMachine launches a new Firecracker VM with the given drives and resource limits.
+// The VM is automatically stopped when ctx is cancelled.
+func StartMachine(ctx context.Context, drives []DriveMount, resources ResourceRequirements) (*MicroVM, error) {
 	id := uuid.New().String()
 	jailerDir := filepath.Join(jailerBase, "firecracker", id)
 
@@ -90,8 +95,8 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 		},
 		Drives: driveConfigs,
 		MachineCfg: models.MachineConfiguration{
-			MemSizeMib: firecracker.Int64(512),
-			VcpuCount:  firecracker.Int64(1),
+			MemSizeMib: firecracker.Int64(resources.MemoryMb),
+			VcpuCount:  firecracker.Int64(resources.CpuCount),
 		},
 		NetworkInterfaces: firecracker.NetworkInterfaces{
 			{
@@ -169,7 +174,9 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 	return vm, nil
 }
 
-func (vm *MicroVM) Connect() (net.Conn, error) {
+// Connect dials the VM's vsock port and returns a message connection to the in-VM agent.
+// It retries up to connectRetries times before giving up.
+func (vm *MicroVM) Connect() (*agentproto.Conn, error) {
 	var (
 		conn net.Conn
 		err  error
@@ -200,11 +207,12 @@ func (vm *MicroVM) Connect() (net.Conn, error) {
 			continue
 		}
 
-		return conn, nil
+		return agentproto.NewConn(conn), nil
 	}
 	return nil, fmt.Errorf("failed to connect to VM after %d attempts: %w", connectRetries, err)
 }
 
+// Stop shuts down the VM and frees all the resources it used.
 func (vm *MicroVM) Stop() error {
 	var err error
 	vm.stopOnce.Do(func() {
@@ -221,6 +229,7 @@ func (vm *MicroVM) Stop() error {
 	return err
 }
 
+// CleanUpDrives calls the Cleanup function on each drive, logging any errors.
 func (vm *MicroVM) CleanUpDrives() {
 	for _, drive := range vm.drives {
 		if drive.Cleanup == nil {
