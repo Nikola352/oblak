@@ -14,6 +14,8 @@ import (
 	"time"
 	"unsafe"
 
+	"oblak/internal/agentproto"
+
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/google/uuid"
@@ -48,7 +50,7 @@ type MicroVM struct {
 	stopOnce      sync.Once
 }
 
-func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
+func StartMachine(ctx context.Context, drives []DriveMount, resources ResourceRequirements) (*MicroVM, error) {
 	id := uuid.New().String()
 	jailerDir := filepath.Join(jailerBase, "firecracker", id)
 
@@ -90,8 +92,8 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 		},
 		Drives: driveConfigs,
 		MachineCfg: models.MachineConfiguration{
-			MemSizeMib: firecracker.Int64(512),
-			VcpuCount:  firecracker.Int64(1),
+			MemSizeMib: firecracker.Int64(resources.MemoryMb),
+			VcpuCount:  firecracker.Int64(resources.CpuCount),
 		},
 		NetworkInterfaces: firecracker.NetworkInterfaces{
 			{
@@ -169,7 +171,7 @@ func StartMachine(ctx context.Context, drives []DriveMount) (*MicroVM, error) {
 	return vm, nil
 }
 
-func (vm *MicroVM) Connect() (net.Conn, error) {
+func (vm *MicroVM) Connect() (*agentproto.Conn, error) {
 	var (
 		conn net.Conn
 		err  error
@@ -200,7 +202,7 @@ func (vm *MicroVM) Connect() (net.Conn, error) {
 			continue
 		}
 
-		return conn, nil
+		return agentproto.NewConn(conn), nil
 	}
 	return nil, fmt.Errorf("failed to connect to VM after %d attempts: %w", connectRetries, err)
 }

@@ -56,7 +56,13 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 
 	drives := []DriveMount{RootDrive(), codeDrive, depsDrive, tmpDrive}
 
-	m, err := StartMachine(ctx, drives)
+	resources := ExecutePolicy.Defaults()
+	ExecutePolicy.ApplyHardLimits(&resources) // keep this if using externally provided resources instead of defaults
+
+	execCtx, cancel := context.WithTimeout(ctx, resources.ExecutionTimeLimit)
+	defer cancel()
+
+	m, err := StartMachine(execCtx, drives, resources)
 	if err != nil {
 		return fmt.Errorf("failed to start build machine: %w", err)
 	}
@@ -65,20 +71,17 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 
 	log.Printf("Log available at: %s\n", m.LogPath)
 
-	rawConn, err := m.Connect()
+	conn, err := m.Connect()
 	if err != nil {
 		return err
 	}
-	conn := agentproto.NewConn(rawConn)
-	defer func(conn *agentproto.Conn) {
-		_ = conn.Close()
-	}(conn)
+	defer func() { _ = conn.Close() }()
 
 	if err = conn.Send(agentproto.Exec()); err != nil {
 		return err
 	}
 
-	if _, err = e.logStreamer.Stream(ctx, logsObjectName, conn); err != nil {
+	if _, err = e.logStreamer.Stream(execCtx, logsObjectName, conn); err != nil {
 		return fmt.Errorf("failed during log streaming: %w", err)
 	}
 	log.Printf("Log streaming completed")

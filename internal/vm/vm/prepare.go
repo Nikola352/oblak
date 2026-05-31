@@ -50,7 +50,13 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	drives := []DriveMount{RootDrive(), archiveDrive, depsDrive}
 
-	m, err := StartMachine(ctx, drives)
+	resources := PreparePolicy.Defaults()
+	PreparePolicy.ApplyHardLimits(&resources) // keep this if using externally provided resources instead of defaults
+
+	execCtx, cancel := context.WithTimeout(ctx, resources.ExecutionTimeLimit)
+	defer cancel()
+
+	m, err := StartMachine(execCtx, drives, resources)
 	if err != nil {
 		return fmt.Errorf("failed to start build machine: %w", err)
 	}
@@ -59,20 +65,17 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	log.Printf("Log available at: %s\n", m.LogPath)
 
-	rawConn, err := m.Connect()
+	conn, err := m.Connect()
 	if err != nil {
 		return err
 	}
-	conn := agentproto.NewConn(rawConn)
-	defer func(conn *agentproto.Conn) {
-		_ = conn.Close()
-	}(conn)
+	defer func() { _ = conn.Close() }()
 
 	if err = conn.Send(agentproto.Build()); err != nil {
 		return err
 	}
 
-	finalMsg, err := ep.logStreamer.Stream(ctx, logsObjectName, conn)
+	finalMsg, err := ep.logStreamer.Stream(execCtx, logsObjectName, conn)
 	if err != nil {
 		return fmt.Errorf("failed during build stream logging: %w", err)
 	}
