@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func Publish(invocationId uuid.UUID, objectName, dependencyName string) error {
+func Publish(invocationId uuid.UUID, objectName, dependencyName, payload string) error {
 	cfg := config.Load()
 	logger := watermill.NewStdLogger(false, false)
 	publisher, err := amqp.NewPublisher(queue.PublisherConfig(*cfg), logger)
@@ -26,6 +26,7 @@ func Publish(invocationId uuid.UUID, objectName, dependencyName string) error {
 		InvocationId:           invocationId,
 		CodeObjectName:         objectName,
 		DependenciesObjectName: dependencyName,
+		Payload:                payload,
 	}); err != nil {
 		return fmt.Errorf("failed to publish to build queue: %v", err)
 	}
