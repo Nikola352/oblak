@@ -59,6 +59,21 @@ mkdir -p "$JAILER_BASE"
 chown root:oblak "$JAILER_BASE"
 chmod 775 "$JAILER_BASE"
 
+# Drive staging directory. Drive files are created here by the Go service and
+# read/written by Firecracker (uid/gid 900). The directory is owned by the
+# service user with group "firecracker". The setgid bit causes new files to
+# inherit group "firecracker", so a chmod 0660 on each drive file restricts
+# access to owner + firecracker only — no world-readable files in /tmp.
+# Mode 2770: only the owner (service user) can create files here.
+DRIVE_DIR="$JAILER_BASE/drives"
+mkdir -p "$DRIVE_DIR"
+if [[ -n "$DEV_USER" ]]; then
+    chown "$DEV_USER":firecracker "$DRIVE_DIR"
+else
+    chown oblak:firecracker "$DRIVE_DIR"
+fi
+chmod 2770 "$DRIVE_DIR"
+
 # Kernel and rootfs image store.
 # Owned by oblak because Linux protected_hardlinks (on by default since kernel
 # 3.6) prevents unprivileged users from hard-linking files they don't own or
@@ -106,6 +121,7 @@ echo "Host setup complete."
 echo "  Jailed VM identity : firecracker (uid=$FIRECRACKER_UID gid=$FIRECRACKER_GID)"
 echo "  Service group      : oblak"
 echo "  Chroot base        : $JAILER_BASE  (root:oblak 775)"
+echo "  Drive staging      : $JAILER_BASE/drives  (${DEV_USER:-oblak}:firecracker 2770)"
 echo "  Image dir          : $IMAGE_DIR  (oblak:oblak 755)"
 echo "  Jailer             : $JAILER_BIN  (setuid root)"
 [[ -n "$KVM_MOD" ]] && \

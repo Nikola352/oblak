@@ -10,15 +10,25 @@ import (
 	"github.com/minio/minio-go/v7"
 )
 
+// EnvironmentPrepareRunner boots a short-lived VM to install dependencies and persist the resulting drive back to MinIO.
 type EnvironmentPrepareRunner struct {
-	filestore *minio.Client
+	filestore   *minio.Client
+	logStreamer *InvocationLogStreamer
 }
 
-func NewEnvironmentPrepareRunner(filestore *minio.Client) *EnvironmentPrepareRunner {
-	return &EnvironmentPrepareRunner{filestore}
+// NewEnvironmentPrepareRunner returns a runner backed by the given MinIO client.
+func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner {
+	bucketRegistry := filestore.NewBucketRegistry()
+	bucketName := bucketRegistry.Name(filestore.LogsBucket)
+	return &EnvironmentPrepareRunner{
+		filestore:   client,
+		logStreamer: NewInvocationLogStreamer(client, bucketName),
+	}
 }
 
-func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName string) (err error) {
+// PrepareEnvironment boots a VM with the given code and dependency drives, runs the build
+// agent, streams output to logsObjectName, and on success uploads the prepared deps drive.
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -44,7 +54,13 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	drives := []DriveMount{RootDrive(), archiveDrive, depsDrive}
 
-	m, err := StartMachine(ctx, drives)
+	resources := PreparePolicy.Defaults()
+	PreparePolicy.ApplyHardLimits(&resources) // keep this if using externally provided resources instead of defaults
+
+	execCtx, cancel := context.WithTimeout(ctx, resources.ExecutionTimeLimit)
+	defer cancel()
+
+	m, err := StartMachine(execCtx, drives, resources)
 	if err != nil {
 		return fmt.Errorf("failed to start build machine: %w", err)
 	}
@@ -53,31 +69,24 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	log.Printf("Log available at: %s\n", m.LogPath)
 
-	rawConn, err := m.Connect()
+	conn, err := m.Connect()
 	if err != nil {
 		return err
 	}
-	conn := agentproto.NewConn(rawConn)
-	defer func(conn *agentproto.Conn) {
-		_ = conn.Close()
-	}(conn)
+	defer func() { _ = conn.Close() }()
 
 	if err = conn.Send(agentproto.Build()); err != nil {
 		return err
 	}
 
-	var isSuccessful = false
-	for {
-		msg, err := conn.Receive()
-		if err != nil {
-			return err
-		}
-		log.Println(msg) // TODO: stream outputs to minio
-		if msg.Type == agentproto.TypeDone || msg.Type == agentproto.TypeError {
-			isSuccessful = msg.Type == agentproto.TypeDone && *msg.ExitCode == 0
-			break
-		}
+	finalMsg, err := ep.logStreamer.Stream(execCtx, logsObjectName, conn)
+	if err != nil {
+		return fmt.Errorf("failed during build stream logging: %w", err)
 	}
+
+	// Compute build success using the final execution message
+	isSuccessful := finalMsg.Type == agentproto.TypeDone && finalMsg.ExitCode != nil && *finalMsg.ExitCode == 0
+	// ---------------------------------------------
 
 	if err = m.Stop(); err != nil {
 		log.Printf("failed to stop vm %s: %v", m.Id, err)
@@ -85,6 +94,7 @@ func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, code
 
 	if isSuccessful {
 		err = depsDrive.Save()
+
 		if err != nil {
 			return fmt.Errorf("failed to upload prepared env to minio: %v\n", err)
 		}

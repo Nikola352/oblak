@@ -40,6 +40,12 @@ else
     (cd "$src" && go build -o /opt/cni/bin/tc-redirect-tap ./cmd/tc-redirect-tap)
 fi
 
+# tc-redirect-tap and ptp need CAP_NET_ADMIN + CAP_SYS_ADMIN to call setns()
+# when entering a VM's network namespace. They are exec'd as child processes
+# by the SDK and do not inherit file capabilities from the parent binary.
+setcap cap_net_admin,cap_sys_admin+eip /opt/cni/bin/tc-redirect-tap
+setcap cap_net_admin,cap_sys_admin+eip /opt/cni/bin/ptp
+
 # ---------------------------------------------------------------------------
 # CNI network config
 #
@@ -69,7 +75,7 @@ cat > /etc/cni/conf.d/oblak.conflist <<EOF
   "plugins": [
     {
       "type": "ptp",
-      "ipMasq": true,
+      "ipMasq": false,
       "ipam": {
         "type": "host-local",
         "subnet": "${VM_SUBNET}",
@@ -96,6 +102,8 @@ EOF
 SERVER_USER="${SUDO_USER:-$(whoami)}"
 mkdir -p /var/run/netns
 chown "$SERVER_USER" /var/run/netns
+mkdir -p /var/lib/cni
+chown -R "$SERVER_USER" /var/lib/cni
 
 # ---------------------------------------------------------------------------
 # IP forwarding
@@ -134,6 +142,10 @@ ipt_ensure() {
         iptables "$op" "$@"
     fi
 }
+
+# NAT masquerade for VM internet access (replaces ptp's ipMasq which requires
+# iptables to run with elevated caps as a child of the CNI plugin process).
+ipt_ensure -A POSTROUTING -t nat -s "$VM_SUBNET" -j MASQUERADE
 
 # Block VM traffic to all RFC 1918 private ranges.
 # Inserted at position 1 so they precede any existing rules.

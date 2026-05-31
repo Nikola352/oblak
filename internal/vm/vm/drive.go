@@ -5,14 +5,20 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/firecracker-microvm/firecracker-go-sdk"
 	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 	"github.com/minio/minio-go/v7"
 )
 
-const driveSizeMB = 512
+const (
+	driveSizeMB = 512
+	driveDir    = jailerBase + "/drives"
+)
 
+// DriveMount bundles a Firecracker drive config with optional Save and Cleanup callbacks.
+// Save persists the drive's contents (e.g. upload to MinIO); Cleanup removes local temp files.
 type DriveMount struct {
 	Config  models.Drive
 	Save    func() error
@@ -22,7 +28,7 @@ type DriveMount struct {
 // RootDrive returns the shared read-only root filesystem drive.
 func RootDrive() DriveMount {
 	return DriveMount{Config: models.Drive{
-		PathOnHost:   firecracker.String("./deployment/firecracker/rootfs.squashfs"),
+		PathOnHost:   firecracker.String(filepath.Join(imageDir, "rootfs.squashfs")),
 		IsRootDevice: firecracker.Bool(true),
 		IsReadOnly:   firecracker.Bool(true),
 	}}
@@ -31,7 +37,7 @@ func RootDrive() DriveMount {
 // MinioDrive downloads objectName from Minio into a temp file and returns a read-only drive.
 // Cleanup deletes the temp file.
 func MinioDrive(ctx context.Context, filestore *minio.Client, bucket, objectName string) (DriveMount, error) {
-	file, err := os.CreateTemp("", "drive-*.ext4")
+	file, err := os.CreateTemp(driveDir, "drive-*.ext4")
 	if err != nil {
 		return DriveMount{}, err
 	}
@@ -40,6 +46,11 @@ func MinioDrive(ctx context.Context, filestore *minio.Client, bucket, objectName
 	}
 
 	if err := filestore.FGetObject(ctx, bucket, objectName, file.Name(), minio.GetObjectOptions{}); err != nil {
+		_ = os.Remove(file.Name())
+		return DriveMount{}, err
+	}
+
+	if err := os.Chmod(file.Name(), 0o240); err != nil {
 		_ = os.Remove(file.Name())
 		return DriveMount{}, err
 	}
@@ -143,7 +154,7 @@ func ArchiveDrive(ctx context.Context, filestore *minio.Client, bucket, objectNa
 		return DriveMount{}, err
 	}
 
-	squashfs, err := os.CreateTemp("", "drive-*.sqfs")
+	squashfs, err := os.CreateTemp(driveDir, "drive-*.sqfs")
 	if err != nil {
 		return DriveMount{}, err
 	}
@@ -155,6 +166,11 @@ func ArchiveDrive(ctx context.Context, filestore *minio.Client, bucket, objectNa
 
 	// -noappend overwrites the pre-created temp file instead of appending to it
 	if err = exec.CommandContext(ctx, "mksquashfs", extractDir, squashfsPath, "-noappend").Run(); err != nil {
+		_ = os.Remove(squashfsPath)
+		return DriveMount{}, err
+	}
+
+	if err = os.Chmod(squashfsPath, 0o240); err != nil {
 		_ = os.Remove(squashfsPath)
 		return DriveMount{}, err
 	}
@@ -174,7 +190,7 @@ func ArchiveDrive(ctx context.Context, filestore *minio.Client, bucket, objectNa
 
 // createBlankExt4 creates a temp file of sizeMB formatted as ext4 and returns its path.
 func createBlankExt4(sizeMB int64) (string, error) {
-	file, err := os.CreateTemp("", "drive-*.ext4")
+	file, err := os.CreateTemp(driveDir, "drive-*.ext4")
 	if err != nil {
 		return "", err
 	}
@@ -186,10 +202,17 @@ func createBlankExt4(sizeMB int64) (string, error) {
 	path := file.Name()
 
 	if err = os.Truncate(path, sizeMB*1024*1024); err != nil {
+		_ = os.Remove(path)
 		return "", err
 	}
 
 	if err = exec.Command("mkfs.ext4", "-F", path).Run(); err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+
+	if err = os.Chmod(path, 0o660); err != nil {
+		_ = os.Remove(path)
 		return "", err
 	}
 

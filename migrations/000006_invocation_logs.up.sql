@@ -1,0 +1,2 @@
+ALTER TABLE invocations
+    ADD COLUMN log_path TEXT DEFAULT NULL;

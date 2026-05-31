@@ -8,6 +8,7 @@ import (
 	"oblak/internal/server/events"
 	"oblak/internal/server/extractor"
 	"oblak/internal/server/httpserver"
+	"oblak/internal/server/invocations"
 	"oblak/internal/server/ratelimiter"
 
 	"github.com/gin-gonic/gin"
@@ -43,8 +44,11 @@ func main() {
 	bucketInitializer := filestore.NewBucketInitializer(minioClient, bucketRegistry)
 
 	tokenBucket := ratelimiter.NewTokenBucket(cfg.MaxTokenSize, cfg.TimeInterval)
+	invocationLogStore := invocations.NewInvocationLogStore(minioClient, "oblak-logs")
+
 	functionStore := function.NewStore(db)
 	invocationStore := invocation.NewStore(db)
+
 	quarantineBus := events.NewBus[events.QuarantineEvent]()
 	extractionBus := events.NewBus[events.ExtractionEvent]()
 
@@ -55,7 +59,7 @@ func main() {
 	if err := bucketInitializer.InitializeBuckets(ctx); err != nil {
 		log.Fatalf("Failed to initialize buckets: %v", err)
 	}
-	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus, functionStore, invocationStore, tokenBucket)
+	server := httpserver.New(db, minioClient, cfg.KeyEncryptionKey, quarantineBus, extractionBus, functionStore, invocationStore, invocationLogStore, tokenBucket)
 	if err := server.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("server: %v", err)
 	}

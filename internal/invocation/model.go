@@ -21,4 +21,5 @@ type Invocation struct {
 	Status         Status     `db:"status"`
 	InvocationTime *time.Time `db:"invocation_time"`
 	EndTime        *time.Time `db:"end_time"`
+	LogPath        *string    `db:"log_path"`
 }

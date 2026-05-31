@@ -31,7 +31,8 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 
 	driveObjectName := fmt.Sprintf("%s-deps.ext4", uuid.New().String())
 
-	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName); err != nil {
+	objectName := generatePrepareObjectName(msg.FunctionId)
+	if err = s.runner.PrepareEnvironment(ctx, msg.CodeObjectName, driveObjectName, objectName); err != nil {
 		var userErr *vm.UserError
 		if errors.As(err, &userErr) {
 			log.Printf("environment prepare: %v", userErr)
@@ -46,11 +47,14 @@ func (s *EnvironmentPrepareService) Prepare(ctx context.Context, msg BuildMessag
 		}
 		return err
 	}
-
 	if err = s.functionStore.UpdateFunctionStatusAndDrivePath(ctx, msg.FunctionId, function.StatusReady, driveObjectName); err != nil {
 		log.Printf("failed to write status to db: %v", err)
 		return err
 	}
-
 	return nil
+}
+
+func generatePrepareObjectName(id uuid.UUID) string {
+
+	return fmt.Sprintf("%s_prepare.log", id.String())
 }
