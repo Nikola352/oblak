@@ -156,14 +156,14 @@ func (s *Store) GetFunctionsByUserId(ctx context.Context, userUUID uuid.UUID) ([
 	return functions, nil
 }
 
-func (s *Store) CheckFunctionIdAndUserId(ctx context.Context, functionId uuid.UUID, userId uuid.UUID) (Function, error) {
+func (s *Store) GetFunctionById(ctx context.Context, functionId uuid.UUID) (Function, error) {
 	var function Function
 
 	err := s.db.QueryRow(ctx,
 		`SELECT function_id, user_id, status, archive_path, drive_path
 		 FROM functions
-		 WHERE function_id = $1 AND user_id = $2`,
-		functionId, userId,
+		 WHERE function_id = $1`,
+		functionId,
 	).Scan(
 		&function.FunctionId,
 		&function.UserId,

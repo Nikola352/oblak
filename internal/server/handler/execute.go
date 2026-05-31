@@ -8,7 +8,6 @@ import (
 	"oblak/internal/server/vmexecutepublisher"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -17,25 +16,12 @@ func (h *Handler) ExecuteLambda(ctx context.Context, request api.ExecuteLambdaRe
 	if !h.tokenBucket.CheckTokenCondition() {
 		return nil, fmt.Errorf("execution rate limit exceeded")
 	}
-	ginCtx, ok := ctx.(*gin.Context)
-	if !ok {
-		return nil, fmt.Errorf("failed to get gin context")
-	}
-	userID, exists := ginCtx.Get("user_id")
-	if !exists {
-		return nil, fmt.Errorf("user_id not found in context")
-	}
-	userUUID, ok := userID.(uuid.UUID)
-	if !ok {
-		return nil, fmt.Errorf("user_id is not a string")
-	}
 	functionId, err := uuid.Parse(request.FunctionId)
 	if err != nil {
 		return nil, fmt.Errorf("function_id is not valid UUID")
 	}
-
 	// check if the user is owner of the method he requests to execute
-	function, err := h.functionStore.CheckFunctionIdAndUserId(ctx, functionId, userUUID)
+	function, err := h.functionStore.GetFunctionById(ctx, functionId)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check function %v", err)
 	}
