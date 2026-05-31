@@ -38,7 +38,7 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 
 	logsObjectName := generateObjectName(msg.InvocationId, beginTime)
 
-	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName); err != nil {
+	if err = s.runner.Execute(ctx, msg.CodeObjectName, msg.DependenciesObjectName, logsObjectName, msg.Payload); err != nil {
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
 			log.Printf("failed to reset status after execute error: %v", dbErr)
 		}

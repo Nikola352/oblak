@@ -11,4 +11,5 @@ type ExecuteMessage struct {
 	InvocationId           uuid.UUID `json:"invocation_id"`
 	CodeObjectName         string    `json:"code_object_name"`
 	DependenciesObjectName string    `json:"dependencies_object_name"`
+	Payload                string    `json:"payload"`
 }

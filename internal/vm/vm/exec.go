@@ -28,7 +28,7 @@ func NewExecutionRunner(minioClient *minio.Client) *ExecutionRunner {
 
 // Execute boots a VM with code, dependency, and ephemeral tmp drives, runs the exec agent,
 // streams output to logsObjectName in MinIO, then shuts down the VM.
-func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
+func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjectName, logsObjectName, payload string) (err error) {
 	var pendingCleanups []func() error
 	defer func() {
 		if err != nil {
@@ -81,7 +81,7 @@ func (e *ExecutionRunner) Execute(ctx context.Context, codeObjectName, depsObjec
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err = conn.Send(agentproto.Exec()); err != nil {
+	if err = conn.Send(agentproto.Exec(payload)); err != nil {
 		return err
 	}
 
