@@ -92,6 +92,20 @@ paths:
           schema:
             type: string
             format: uuid
+      requestBody:
+        required: false
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - function
+              properties:
+                function:
+                  type: string
+                  format: binary
+                  description: The function archive file (tar.gz, tar.xz, or zip)
+
       responses:
         "200":
           description: Invocation details with execution logs

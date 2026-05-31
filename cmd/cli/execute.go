@@ -58,7 +58,7 @@ func sendExecutionRequest(functionId string, profile cliconfig.Profile) error {
 
 	ctx := context.Background()
 
-	response, err := client.ExecuteLambda(ctx, functionId)
+	response, err := client.ExecuteLambda(ctx, functionId, "")
 	if err != nil {
 		return err
 	}

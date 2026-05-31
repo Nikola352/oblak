@@ -42,6 +42,7 @@ func (s *ExecutionService) Execute(ctx context.Context, msg ExecuteMessage) erro
 		if dbErr := s.invocationStore.UpdateInvocationStatus(ctx, msg.InvocationId, invocation.StatusPending); dbErr != nil {
 			log.Printf("failed to reset status after execute error: %v", dbErr)
 		}
+		log.Printf("failed to reset status after execute error: %v", err)
 		return err
 	}
 

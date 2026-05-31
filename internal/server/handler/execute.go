@@ -12,7 +12,15 @@ import (
 	"github.com/google/uuid"
 )
 
-const maxPayloadSize = 1024 * 1024 // 1 MB
+type PayloadLimit struct {
+	Bytes int
+	Label string
+}
+
+var MaxPayloadSize = PayloadLimit{
+	Bytes: 1024 * 1024,
+	Label: "1MB",
+}
 
 func (h *Handler) ExecuteLambda(ctx context.Context, request api.ExecuteLambdaRequestObject) (api.ExecuteLambdaResponseObject, error) {
 	payload, err := validatePayload(request.Body)
@@ -55,8 +63,8 @@ func validatePayload(body *api.ExecuteLambdaJSONRequestBody) (string, error) {
 		return "", err
 	}
 
-	if len(payloadBytes) > maxPayloadSize {
-		return "", fmt.Errorf("payload to large over %d", maxPayloadSize)
+	if len(payloadBytes) > MaxPayloadSize.Bytes {
+		return "", fmt.Errorf("payload to large over %s", MaxPayloadSize.Label)
 	}
 
 	payload := string(payloadBytes)
