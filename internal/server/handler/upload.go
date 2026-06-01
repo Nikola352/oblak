@@ -65,7 +65,7 @@ func (h *Handler) UploadLambda(ctx context.Context, request api.UploadLambdaRequ
 		Timestamp:  time.Now(),
 	})
 
-	return api.UploadLambda200JSONResponse{Status: "ok"}, nil
+	return api.UploadLambda200JSONResponse{Status: "ok", FunctionId: f.FunctionId.String()}, nil
 }
 
 func UploadFile(ctx context.Context, filestore *minio.Client, file *ParsedFile, bucketName string) (string, error) {
