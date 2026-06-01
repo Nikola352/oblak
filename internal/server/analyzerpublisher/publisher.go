@@ -3,6 +3,7 @@ package analyzerpublisher
 import (
 	"encoding/json"
 	"fmt"
+	"oblak/internal/analyzer/config"
 	message2 "oblak/internal/analyzer/message"
 	"oblak/internal/server/filestore"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func StartPublisher(funcMessage message2.FunctionMessage) error {
-	amqpURI := "amqp://admin:admin@localhost:5672/"
+	amqpURI := config.Cfg.AMQPURI
 	exchangeName := "analyzer"
 	cfg := publisherConfig(amqpURI, exchangeName)
 
