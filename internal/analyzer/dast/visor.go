@@ -41,7 +41,7 @@ func createContainerConfig() *container.Config {
             if [ -f /tmp/requirements.txt ]; then
                 pip install -q -r /tmp/requirements.txt
             fi
-            python -c "import handler; handler.handle()"
+            python -c "import handler; handler.handle('')"
         `},
 		Env:             []string{"PYTHONUNBUFFERED=1", "PYTHONPATH=/tmp"},
 		WorkingDir:      "/tmp",

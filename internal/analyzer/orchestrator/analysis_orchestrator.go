@@ -81,7 +81,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	err = ao.dependencyAuditor.Audit(ctx, extractPath)
 	log.Println(err)
 	if err != nil {
-		return FAILURE, err
+		return MALICIOUS, err
 	}
 
 	// 4. Scan it

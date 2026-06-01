@@ -56,25 +56,7 @@ func (te *UnzipperService) Extract(sourceTarGz, targetDestinationDir string) err
 		// DYNAMIC STRIPPER: Removes the top-level wrapping folder if it exists
 		// -----------------------------------------------------------------
 		cleanedHeaderName := filepath.Clean(header.Name)
-		parts := strings.Split(cleanedHeaderName, string(os.PathSeparator))
-
-		// If parts length is 1 and it's a directory, this is the root wrapper folder entry itself.
-		// Skip it so we don't create it on the host.
-		if len(parts) == 1 && header.Typeflag == tar.TypeDir {
-			continue
-		}
-
-		// If it's deeper, slice off the first element (the parent folder name)
-		var targetRelPath string
-		if len(parts) > 1 {
-			targetRelPath = filepath.Join(parts[1:]...)
-		} else {
-			targetRelPath = cleanedHeaderName
-		}
-
-		// Construct final destination using the stripped relative path
-		destinationPath := filepath.Join(cleanBaseTarget, targetRelPath)
-		// -----------------------------------------------------------------
+		destinationPath := filepath.Join(cleanBaseTarget, cleanedHeaderName)
 
 		// --- PATH TRAVERSAL MITIGATION ---
 		if !strings.HasPrefix(destinationPath, cleanBaseTarget+string(os.PathSeparator)) && destinationPath != cleanBaseTarget {

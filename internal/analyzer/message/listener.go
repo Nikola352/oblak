@@ -96,14 +96,15 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 	fileName := payload.Path
 	verdict, err := deps.Orchestrator.AnalyzeFile(ctx, fileName, payload.FunctionId)
 
+	dbErr := updateFunctionStatus(payload.FunctionId, verdict, ctx, deps.FunctionStore)
+	if dbErr != nil {
+		return dbErr
+	}
+
 	if err != nil {
 		return err
 	}
 
-	err = updateFunctionStatus(payload.FunctionId, verdict, ctx, deps.FunctionStore)
-	if err != nil {
-		return err
-	}
 	if verdict == orchestrator2.MALICIOUS {
 		return nil
 	}

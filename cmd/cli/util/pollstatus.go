@@ -36,7 +36,7 @@ func PollFunctionStatus(functionId string, profile cliconfig.Profile) {
 		switch status {
 		case "READY":
 			return colorGreen
-		case "FAILED":
+		case "FAILED", "DETECTED":
 			return colorRed
 		case "PENDING":
 			return colorYellow
@@ -118,12 +118,12 @@ func PollFunctionStatus(functionId string, profile cliconfig.Profile) {
 			}
 			lastStatus = result.Status
 
-			if result.Status == "FAILED" || result.Status == "READY" {
+			if result.Status == "FAILED" || result.Status == "READY" || result.Status == "DETECTED" {
 				fmt.Println() // end spinner line
 				fmt.Printf("\n%s%s━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%s\n", colorBold, sc, colorReset)
 
 				icon := "✓"
-				if result.Status == "FAILED" {
+				if result.Status == "FAILED" || result.Status == "DETECTED" {
 					icon = "✗"
 				}
 				fmt.Printf("%s%s%s %sFinal status:%s %s%s%s%s  %s(took %s)%s\n",

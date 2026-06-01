@@ -23,7 +23,13 @@ func (pa *PipAuditor) Audit(ctx context.Context, dirPath string) error {
 	if _, err := os.Stat(reqPath); os.IsNotExist(err) {
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, pa.auditBinaryPath, "-r", reqPath)
+	cmd := exec.CommandContext(ctx, pa.auditBinaryPath,
+		"-r", reqPath,
+		"-f", "json",
+		"--no-deps",
+		"--cache-dir", "/tmp/pyaudit",
+		"--progress-spinner", "off",
+	)
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
