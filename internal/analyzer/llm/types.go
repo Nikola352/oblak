@@ -19,7 +19,6 @@ type OllamaGenerateRequest struct {
 	Format string `json:"format"` // Setting this to "json" activates JSON Mode
 }
 type JudgeVerdict struct {
-	Verdict         string `json:"verdict"`          // "MALICIOUS", "SUSPICIOUS", or "SAFE"
-	ConfidenceScore int    `json:"confidence_score"` // 0 to 100
-	Summary         string `json:"summary"`          // Concise behavioral reasoning
+	Verdict string `json:"verdict"` // "MALICIOUS", "SUSPICIOUS", or "SAFE"
+	// Concise behavioral reasoning
 }

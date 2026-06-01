@@ -34,62 +34,80 @@ func NewGVisorBox() (*GVisorBox, error) {
 }
 
 // ---- Detonate ----
+
 func createContainerConfig() *container.Config {
 	return &container.Config{
 		Image: "python:3.11-alpine",
+		User:  "nobody",
 		Cmd: []string{"sh", "-c", `
-            if [ -f /tmp/requirements.txt ]; then
-                pip install -q -r /tmp/requirements.txt
+            if [ -f /sample/requirements.txt ]; then
+                pip install -q --no-user --target=/tmp/pypackages -r /sample/requirements.txt
             fi
-            python -c "import handler; handler.handle('')"
+            python -c "import sys; sys.path.insert(0, '/tmp/pypackages'); sys.path.insert(0, '/sample'); import handler; handler.handle('')"
         `},
-		Env:             []string{"PYTHONUNBUFFERED=1", "PYTHONPATH=/tmp"},
-		WorkingDir:      "/tmp",
+		Env: []string{
+			"PYTHONUNBUFFERED=1",
+			"PYTHONPATH=/tmp/pypackages:/sample",
+			"PIP_CACHE_DIR=/tmp/pip-cache",
+			"HOME=/tmp",
+		},
+		WorkingDir:      "/sample",
 		NetworkDisabled: false,
 	}
 }
-func createHostConfig() *container.HostConfig {
+
+func createHostConfig(dirPath string) *container.HostConfig {
+	pidsLimit := int64(64)
 	return &container.HostConfig{
 		Runtime:    "runsc",
 		AutoRemove: false,
+		// Sample mounted at /sample — outside /tmp so the tmpfs doesn't shadow it
+		Binds: []string{dirPath + ":/sample:ro"},
 		Resources: container.Resources{
-			Memory: 256 * 1024 * 1024,
+			Memory:    256 * 1024 * 1024,
+			CPUQuota:  50000,
+			CPUPeriod: 100000,
+			PidsLimit: &pidsLimit,
+		},
+		CapDrop:        []string{"ALL"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		ReadonlyRootfs: true,
+		Tmpfs: map[string]string{
+			// Single /tmp tmpfs — pip uses /tmp/pypackages and /tmp/pip-cache
+			// Both are subdirs of this mount, no nested mounts needed
+			"/tmp": "rw,noexec,nosuid,size=256m,uid=65534,gid=65534",
 		},
 	}
-
 }
+
 func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionResult, error) {
+	// Timeout governs the entire detonation, not just log fetching
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
 	before, err := snapshotLogFiles()
 	if err != nil {
 		before = map[string]struct{}{}
 	}
 
-	//base := filepath.Base(dirPath)
 	config := createContainerConfig()
-
-	hostConfig := createHostConfig()
+	hostConfig := createHostConfig(dirPath)
 
 	resp, err := b.cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return nil, err
 	}
-	defer func(cli *client.Client, ctx context.Context, containerID string, options container.RemoveOptions) {
-		err := cli.ContainerRemove(ctx, containerID, options)
-		if err != nil {
-			_ = fmt.Errorf("%v", err)
+
+	// Cleanup uses a fresh context so a cancelled ctx doesn't block removal
+	defer func() {
+		removeCtx, removeCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer removeCancel()
+		if err := b.cli.ContainerRemove(removeCtx, resp.ID, container.RemoveOptions{Force: true}); err != nil {
+			log.Printf("failed to remove container %s: %v", resp.ID, err)
 		}
-	}(b.cli, ctx, resp.ID, container.RemoveOptions{Force: true})
+	}()
 
-	tarStream, err := createTarStream(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("createTarStream: %w", err)
-	}
-	log.Printf("copying files from %q into container", dirPath)
-	if err := b.cli.CopyToContainer(ctx, resp.ID, "/tmp", tarStream, container.CopyToContainerOptions{}); err != nil {
-		return nil, fmt.Errorf("CopyToContainer: %w", err)
-	}
-	log.Printf("copy done")
-
+	// Files are bind-mounted at /sample; no tar copy needed
 	if err := b.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		return nil, err
 	}
@@ -122,6 +140,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionRes
 	); err != nil {
 		return nil, err
 	}
+
 	rawStrace := ""
 	if bootErr != nil {
 		rawStrace = "(strace unavailable: " + bootErr.Error() + ")"
@@ -145,7 +164,6 @@ func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionRes
 func (*GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
 	log.Println("Writing JSON report")
 
-	// Extract the directory path from the output path and create it if it doesn't exist
 	dir := filepath.Dir(outputPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory path: %w", err)
@@ -156,11 +174,12 @@ func (*GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) er
 		return err
 	}
 	defer func(f *os.File) {
-		_ = f.Close() // Ignored the error explicitly or you can log it
+		if err := f.Close(); err != nil {
+			log.Printf("failed to close report file: %v", err)
+		}
 	}(f)
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-
 	return enc.Encode(result)
 }

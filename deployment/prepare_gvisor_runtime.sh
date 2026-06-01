@@ -9,9 +9,9 @@ sudo tee /etc/docker/daemon.json << 'EOF'
     "runsc": {
       "path": "/usr/local/bin/runsc",
       "runtimeArgs": [
-        "--strace",
-        "--log-format=json",
-        "--debug-log=/tmp/gvisor-logs/"
+        "--debug-log=/tmp/runsc-logs/",
+        "--trace=strace",
+        "--debug"
       ]
     }
   }
