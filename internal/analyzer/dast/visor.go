@@ -76,7 +76,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionRes
 	defer func(cli *client.Client, ctx context.Context, containerID string, options container.RemoveOptions) {
 		err := cli.ContainerRemove(ctx, containerID, options)
 		if err != nil {
-
+			_ = fmt.Errorf("%v", err)
 		}
 	}(b.cli, ctx, resp.ID, container.RemoveOptions{Force: true})
 
@@ -142,7 +142,7 @@ func (b *GVisorBox) Detonate(ctx context.Context, dirPath string) (*ExecutionRes
 	}, nil
 }
 
-func (_ *GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
+func (*GVisorBox) WriteJSONReport(result *ExecutionResult, outputPath string) error {
 	log.Println("Writing JSON report")
 
 	// Extract the directory path from the output path and create it if it doesn't exist

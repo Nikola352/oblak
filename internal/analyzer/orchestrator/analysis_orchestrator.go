@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"oblak/internal/analyzer/audit"
 	"oblak/internal/analyzer/av"
@@ -56,6 +57,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	defer func(name string) {
 		err := os.Remove(name)
 		if err != nil {
+			_ = fmt.Errorf("%v", err)
 		}
 	}(localPath)
 

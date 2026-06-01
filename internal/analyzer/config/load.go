@@ -13,6 +13,10 @@ func Load() {
 		GetEnv("OLLAMA_URL", "http://localhost:11434"),
 		"Ollama API Engine URL",
 	)
+	flag.StringVar(&Cfg.AMQPURI, "amqp-uri",
+		GetEnv("AMQP_URI", "amqp://admin:admin@localhost:5672/"),
+		"Ollama API Engine URL",
+	)
 	flag.StringVar(&Cfg.AIModelName, "ai-model-name",
 		GetEnv("AI_MODEL_NAME", "qwen2.5:3b"),
 		"Target Ollama Large Language Model Variant identifier tag",

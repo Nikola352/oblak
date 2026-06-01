@@ -3,7 +3,6 @@ package dast
 import (
 	"archive/tar"
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"log"
@@ -52,26 +51,11 @@ func createTarStream(localDir string) (io.Reader, error) {
 		return nil, err
 	}
 	log.Printf("packed %d files", count)
-	tw.Close()
-	return buf, nil
-}
-func (b *GVisorBox) readFileFromContainer(ctx context.Context, containerID, path string) (string, error) {
-	rc, _, err := b.cli.CopyFromContainer(ctx, containerID, path)
+	err = tw.Close()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer rc.Close()
-
-	tr := tar.NewReader(rc)
-	if _, err := tr.Next(); err != nil {
-		return "", err
-	}
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, tr); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
+	return buf, nil
 }
 
 func snapshotLogFiles() (map[string]struct{}, error) {

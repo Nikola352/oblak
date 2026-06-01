@@ -1,12 +1,12 @@
 package llm
 
-type SastVerdict int
+type SastVerdict string
 
 // 2. Create constants using iota (which auto-increments)
 const (
-	FAILURE   SastVerdict = iota // 0
-	MALICIOUS                    // 1
-	SAFE                         // 2
+	FAILURE   SastVerdict = "FAILURE"   // 0
+	MALICIOUS SastVerdict = "MALICIOUS" // 1
+	SAFE      SastVerdict = "SAFE"      // 2
 )
 
 type OllamaGenerateResponse struct {

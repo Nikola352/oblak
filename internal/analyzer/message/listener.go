@@ -107,7 +107,9 @@ func processMessage(ctx context.Context, msg *message.Message, deps *ListenerDep
 	if verdict == orchestrator2.MALICIOUS {
 		return nil
 	}
-	err = deps.FileStore.Move(ctx, fileName, deps.BucketRegistry.Name(filestore.FunctionsBucket))
+	if err = deps.FileStore.Move(ctx, fileName, deps.BucketRegistry.Name(filestore.FunctionsBucket)); err != nil {
+		return err
+	}
 
 	if err = vmpublish.Publish(payload.FunctionId, payload.Path); err != nil {
 		return err
