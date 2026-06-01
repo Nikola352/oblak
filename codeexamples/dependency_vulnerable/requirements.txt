@@ -2,10 +2,10 @@
 Plone==5.2.6
 
 # CVE-2021-28363 (High: 7.5) - De-serialization / Information Disclosure via CRLF injection
-urllib3==1.26.4
+# urllib3==1.26.4
 
 # CVE-2019-14806 (Critical: 9.8) - Remote Code Execution via Werkzeug debugger pin bypass
-Werkzeug==0.15.2
+# Werkzeug==0.15.2
 
 # CVE-2021-33571 (Critical: 9.8) - SSRF and RCE via template handling flaws
-Django==3.2.3
+# Django==3.2.3
