@@ -14,6 +14,8 @@ type Store struct {
 	db *pgxpool.Pool
 }
 
+var ErrFunctionNotFound = errors.New("function not found")
+
 func NewStore(db *pgxpool.Pool) *Store {
 	return &Store{db: db}
 }
@@ -180,4 +182,26 @@ func (s *Store) GetFunctionById(ctx context.Context, functionId uuid.UUID) (Func
 	}
 
 	return function, nil
+}
+
+func (s *Store) GetFunctionStatusById(ctx context.Context, functionId uuid.UUID) (string, error) {
+	var functionStatus string
+
+	err := s.db.QueryRow(ctx,
+		`SELECT status
+		 FROM functions
+		 WHERE function_id = $1`,
+		functionId,
+	).Scan(
+		&functionStatus,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrFunctionNotFound
+		}
+		return "", fmt.Errorf("check function id: %w", err)
+	}
+
+	return functionStatus, nil
 }

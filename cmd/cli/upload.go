@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
+	"oblak/cmd/cli/util"
 	httpclient "oblak/internal/cli/client"
 	cliconfig "oblak/internal/cli/config"
 	"os"
@@ -15,6 +17,11 @@ import (
 
 	"github.com/spf13/cobra"
 )
+
+type UploadLambdaResponse struct {
+	FunctionID string `json:"functionId"`
+	Status     string `json:"status"`
+}
 
 var uploadCmd = &cobra.Command{
 	Use:   "upload [path]",
@@ -37,10 +44,11 @@ var uploadCmd = &cobra.Command{
 		}
 		fmt.Printf("Uploading to %s as user %s\n", profile.Endpoint, profile.AuthID)
 
-		err = uploadFile(path, profile)
+		functionId, err := uploadFile(path, profile)
 		if err != nil {
 			return err
 		}
+		util.PollFunctionStatus(functionId, profile)
 
 		return nil
 	},
@@ -63,10 +71,10 @@ func validatePath(path string) (string, error) {
 	return absPath, nil
 }
 
-func uploadFile(path string, profile cliconfig.Profile) error {
+func uploadFile(path string, profile cliconfig.Profile) (string, error) {
 	body, err := zipFolder(path)
 	if err != nil {
-		return fmt.Errorf("creating request body: %w", err)
+		return "", fmt.Errorf("creating request body: %w", err)
 	}
 
 	var buf bytes.Buffer
@@ -74,33 +82,43 @@ func uploadFile(path string, profile cliconfig.Profile) error {
 
 	part, err := writer.CreateFormFile("function", "function.tar.gz")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, err = part.Write(body.Bytes())
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	err = writer.Close()
 	if err != nil {
-		return err
+		return "", err
 	}
 	client, err := httpclient.NewSignedClient(profile)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	ctx := context.Background()
 
 	response, err := client.UploadLambdaWithBodyWithResponse(ctx, writer.FormDataContentType(), &buf)
 	if err != nil {
-		return err
+		return "", err
+	}
+	if response.StatusCode() >= 300 {
+		return "", fmt.Errorf("upload failed: %s", string(response.Body))
 	}
 
-	fmt.Println(string(response.Body))
+	var result UploadLambdaResponse
 
-	return nil
+	err = json.Unmarshal(response.Body, &result)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	fmt.Printf("Function with functionId: %s uploaded with status: %s \n", result.FunctionID, result.Status)
+
+	return result.FunctionID, nil
 }
 
 func zipFolder(source string) (*bytes.Buffer, error) {

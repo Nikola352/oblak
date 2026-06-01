@@ -56,6 +56,11 @@ type FunctionEntity struct {
 	Status        string     `json:"status"`
 }
 
+// FunctionStatusResponse defines model for FunctionStatusResponse.
+type FunctionStatusResponse struct {
+	Status string `json:"status"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status string `json:"status"`
@@ -90,7 +95,8 @@ type SingleInvocationDetailsResponse struct {
 
 // UploadResponse defines model for UploadResponse.
 type UploadResponse struct {
-	Status string `json:"status"`
+	FunctionId string `json:"functionId"`
+	Status     string `json:"status"`
 }
 
 // BadRequest defines model for BadRequest.
@@ -195,6 +201,9 @@ type ClientInterface interface {
 	// GetFunctionInvocations request
 	GetFunctionInvocations(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetFunctionStatus request
+	GetFunctionStatus(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealth request
 	GetHealth(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -234,6 +243,18 @@ func (c *Client) ExecuteLambda(ctx context.Context, functionId string, body Exec
 
 func (c *Client) GetFunctionInvocations(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetFunctionInvocationsRequest(c.Server, functionId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetFunctionStatus(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFunctionStatusRequest(c.Server, functionId)
 	if err != nil {
 		return nil, err
 	}
@@ -356,6 +377,40 @@ func NewGetFunctionInvocationsRequest(server string, functionId openapi_types.UU
 	}
 
 	operationPath := fmt.Sprintf("/functions/%s/invocations", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetFunctionStatusRequest generates requests for GetFunctionStatus
+func NewGetFunctionStatusRequest(server string, functionId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "function_id", functionId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/functions/%s/status", pathParam0)
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -541,6 +596,9 @@ type ClientWithResponsesInterface interface {
 	// GetFunctionInvocationsWithResponse request
 	GetFunctionInvocationsWithResponse(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetFunctionInvocationsResponse, error)
 
+	// GetFunctionStatusWithResponse request
+	GetFunctionStatusWithResponse(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetFunctionStatusResponse, error)
+
 	// GetHealthWithResponse request
 	GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error)
 
@@ -610,6 +668,38 @@ func (r GetFunctionInvocationsResponse) StatusCode() int {
 
 // ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
 func (r GetFunctionInvocationsResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetFunctionStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *FunctionStatusResponse
+	JSON400      *BadRequest
+	JSON404      *NotFound
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFunctionStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFunctionStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetFunctionStatusResponse) ContentType() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Header.Get("Content-Type")
 	}
@@ -766,6 +856,15 @@ func (c *ClientWithResponses) GetFunctionInvocationsWithResponse(ctx context.Con
 	return ParseGetFunctionInvocationsResponse(rsp)
 }
 
+// GetFunctionStatusWithResponse request returning *GetFunctionStatusResponse
+func (c *ClientWithResponses) GetFunctionStatusWithResponse(ctx context.Context, functionId openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetFunctionStatusResponse, error) {
+	rsp, err := c.GetFunctionStatus(ctx, functionId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFunctionStatusResponse(rsp)
+}
+
 // GetHealthWithResponse request returning *GetHealthResponse
 func (c *ClientWithResponses) GetHealthWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetHealthResponse, error) {
 	rsp, err := c.GetHealth(ctx, reqEditors...)
@@ -844,6 +943,46 @@ func ParseGetFunctionInvocationsResponse(rsp *http.Response) (*GetFunctionInvoca
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []InvocationResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest NotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetFunctionStatusResponse parses an HTTP response from a GetFunctionStatusWithResponse call
+func ParseGetFunctionStatusResponse(rsp *http.Response) (*GetFunctionStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFunctionStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest FunctionStatusResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1008,6 +1147,9 @@ type ServerInterface interface {
 	// Get invocation history for a specific function ordered from newest to oldest
 	// (GET /functions/{function_id}/invocations)
 	GetFunctionInvocations(c *gin.Context, functionId openapi_types.UUID)
+	// Get function status
+	// (GET /functions/{function_id}/status)
+	GetFunctionStatus(c *gin.Context, functionId openapi_types.UUID)
 
 	// (GET /health)
 	GetHealth(c *gin.Context)
@@ -1079,6 +1221,31 @@ func (siw *ServerInterfaceWrapper) GetFunctionInvocations(c *gin.Context) {
 	}
 
 	siw.Handler.GetFunctionInvocations(c, functionId)
+}
+
+// GetFunctionStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetFunctionStatus(c *gin.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "function_id" -------------
+	var functionId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "function_id", c.Param("function_id"), &functionId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter function_id: %w", err), http.StatusBadRequest)
+		return
+	}
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		middleware(c)
+		if c.IsAborted() {
+			return
+		}
+	}
+
+	siw.Handler.GetFunctionStatus(c, functionId)
 }
 
 // GetHealth operation middleware
@@ -1174,6 +1341,7 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 
 	router.POST(options.BaseURL+"/execute/:functionId", wrapper.ExecuteLambda)
 	router.GET(options.BaseURL+"/functions/:function_id/invocations", wrapper.GetFunctionInvocations)
+	router.GET(options.BaseURL+"/functions/:function_id/status", wrapper.GetFunctionStatus)
 	router.GET(options.BaseURL+"/health", wrapper.GetHealth)
 	router.GET(options.BaseURL+"/invocations/:invocation_id", wrapper.GetInvocationDetails)
 	router.GET(options.BaseURL+"/list-functions", wrapper.GetUserFunctions)
@@ -1246,6 +1414,56 @@ func (response GetFunctionInvocations400JSONResponse) VisitGetFunctionInvocation
 type GetFunctionInvocations404JSONResponse struct{ NotFoundJSONResponse }
 
 func (response GetFunctionInvocations404JSONResponse) VisitGetFunctionInvocationsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFunctionStatusRequestObject struct {
+	FunctionId openapi_types.UUID `json:"function_id"`
+}
+
+type GetFunctionStatusResponseObject interface {
+	VisitGetFunctionStatusResponse(w http.ResponseWriter) error
+}
+
+type GetFunctionStatus200JSONResponse FunctionStatusResponse
+
+func (response GetFunctionStatus200JSONResponse) VisitGetFunctionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFunctionStatus400JSONResponse struct{ BadRequestJSONResponse }
+
+func (response GetFunctionStatus400JSONResponse) VisitGetFunctionStatusResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetFunctionStatus404JSONResponse struct{ NotFoundJSONResponse }
+
+func (response GetFunctionStatus404JSONResponse) VisitGetFunctionStatusResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -1407,6 +1625,9 @@ type StrictServerInterface interface {
 	// Get invocation history for a specific function ordered from newest to oldest
 	// (GET /functions/{function_id}/invocations)
 	GetFunctionInvocations(ctx context.Context, request GetFunctionInvocationsRequestObject) (GetFunctionInvocationsResponseObject, error)
+	// Get function status
+	// (GET /functions/{function_id}/status)
+	GetFunctionStatus(ctx context.Context, request GetFunctionStatusRequestObject) (GetFunctionStatusResponseObject, error)
 
 	// (GET /health)
 	GetHealth(ctx context.Context, request GetHealthRequestObject) (GetHealthResponseObject, error)
@@ -1533,6 +1754,32 @@ func (sh *strictHandler) GetFunctionInvocations(ctx *gin.Context, functionId ope
 		sh.options.HandlerErrorFunc(ctx, err)
 	} else if validResponse, ok := response.(GetFunctionInvocationsResponseObject); ok {
 		if err := validResponse.VisitGetFunctionInvocationsResponse(ctx.Writer); err != nil {
+			sh.options.ResponseErrorHandlerFunc(ctx, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(ctx, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetFunctionStatus operation middleware
+func (sh *strictHandler) GetFunctionStatus(ctx *gin.Context, functionId openapi_types.UUID) {
+	var request GetFunctionStatusRequestObject
+
+	request.FunctionId = functionId
+
+	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetFunctionStatus(ctx, request.(GetFunctionStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetFunctionStatus")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		sh.options.HandlerErrorFunc(ctx, err)
+	} else if validResponse, ok := response.(GetFunctionStatusResponseObject); ok {
+		if err := validResponse.VisitGetFunctionStatusResponse(ctx.Writer); err != nil {
 			sh.options.ResponseErrorHandlerFunc(ctx, err)
 		}
 	} else if response != nil {

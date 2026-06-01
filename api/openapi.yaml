@@ -37,6 +37,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UploadResponse'
+  /functions/{function_id}/status:
+    get:
+      summary: Get function status
+      operationId: GetFunctionStatus
+      parameters:
+        - name: function_id
+          in: path
+          required: true
+          description: The UUID of the function
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Function status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FunctionStatusResponse'
+        "400":
+          $ref: '#/components/responses/BadRequest'
+        "404":
+          $ref: '#/components/responses/NotFound'
+
   /list-functions:
     get:
       summary: Get all functions for the authenticated user
@@ -92,20 +116,6 @@ paths:
           schema:
             type: string
             format: uuid
-      requestBody:
-        required: false
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required:
-                - function
-              properties:
-                function:
-                  type: string
-                  format: binary
-                  description: The function archive file (tar.gz, tar.xz, or zip)
-
       responses:
         "200":
           description: Invocation details with execution logs
@@ -224,6 +234,14 @@ components:
           type: string
           example: "READY"
     UploadResponse:
+      type: object
+      required: [ status, functionId ]
+      properties:
+        status:
+          type: string
+        functionId:
+          type: string
+    FunctionStatusResponse:
       type: object
       required: [ status ]
       properties:
