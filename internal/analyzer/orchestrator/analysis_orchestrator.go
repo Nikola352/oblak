@@ -140,7 +140,7 @@ func (ao *AnalysisOrchestrator) AnalyzeFile(ctx context.Context, fileName string
 	}
 
 	log.Println("LLM RESPONDED!")
-	log.Printf("%s %s %d", verdict.Verdict, verdict.Summary, verdict.ConfidenceScore)
+	log.Printf("%s", verdict.Verdict)
 	if verdict.Verdict == "MALICIOUS" {
 		return MALICIOUS, nil
 	}
