@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# Builds the agent binary and injects it into the rootfs squashfs image.
+# Requires: squashfs-tools (unsquashfs, mksquashfs).
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+ROOTFS_SRC="./deployment/firecracker/ubuntu-24.04.squashfs"
+ROOTFS_DEST="./deployment/firecracker/rootfs.squashfs"
+AGENT_BIN="./bin/agent"
+
+mkdir -p "$(dirname "$AGENT_BIN")"
+
+echo "==> Building agent binary for linux/amd64..."
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o "$AGENT_BIN" ./cmd/agent
+
+echo "==> Extracting, injecting, and repacking rootfs..."
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
+
+pip_whl_url=$(python3 -c "
+import urllib.request, json
+with urllib.request.urlopen('https://pypi.org/pypi/pip/json') as r:
+    for f in json.load(r)['urls']:
+        if f['filename'].endswith('-py3-none-any.whl'):
+            print(f['url']); break
+")
+
+fakeroot -- bash -c "
+  set -euo pipefail
+  unsquashfs -d '$TMPDIR/rootfs' '$ROOTFS_SRC'
+  mkdir -p '$TMPDIR/rootfs/app' '$TMPDIR/rootfs/deps' '$TMPDIR/rootfs/tmp'
+  ln -sf /proc/net/pnp '$TMPDIR/rootfs/etc/resolv.conf'
+  curl -fsSL '$pip_whl_url' -o '$TMPDIR/pip.whl'
+  unzip -q '$TMPDIR/pip.whl' -d '$TMPDIR/rootfs/usr/lib/python3/dist-packages/'
+  cp '$AGENT_BIN' '$TMPDIR/rootfs/usr/local/bin/agent-runner'
+  chmod 0755 '$TMPDIR/rootfs/usr/local/bin/agent-runner'
+
+  echo '==> Creating unprivileged runner user (UID/GID 5000)...'
+  echo 'runner:x:5000:5000::/nonexistent:/usr/sbin/nologin' >> '$TMPDIR/rootfs/etc/passwd'
+  echo 'runner:x:5000:'                                    >> '$TMPDIR/rootfs/etc/group'
+  echo 'runner:!:::::::'                                  >> '$TMPDIR/rootfs/etc/shadow'
+  [ -f '$TMPDIR/rootfs/etc/gshadow' ] && echo 'runner:!::' >> '$TMPDIR/rootfs/etc/gshadow' || true
+
+  echo '==> Setting mount-point permissions...'
+  chmod 755  '$TMPDIR/rootfs/app'
+  chmod 755  '$TMPDIR/rootfs/deps'
+  chmod 1777 '$TMPDIR/rootfs/tmp'
+
+  echo '==> Removing attack-surface binaries...'
+  # Shells
+  rm -f '$TMPDIR/rootfs/usr/bin/bash'    '$TMPDIR/rootfs/usr/bin/dash' \
+        '$TMPDIR/rootfs/usr/bin/sh'      '$TMPDIR/rootfs/usr/bin/rbash'
+  # Privilege escalation
+  rm -f '$TMPDIR/rootfs/usr/bin/su'      '$TMPDIR/rootfs/usr/bin/sudo' \
+        '$TMPDIR/rootfs/usr/sbin/sudo'
+  # Network download / exfiltration
+  rm -f '$TMPDIR/rootfs/usr/bin/wget'    '$TMPDIR/rootfs/usr/bin/curl' \
+        '$TMPDIR/rootfs/usr/bin/nc'      '$TMPDIR/rootfs/usr/bin/ncat' \
+        '$TMPDIR/rootfs/usr/bin/netcat'  '$TMPDIR/rootfs/usr/bin/socat'
+  # Fingerprinting / recon
+  rm -f '$TMPDIR/rootfs/usr/bin/whoami'  '$TMPDIR/rootfs/usr/bin/id' \
+        '$TMPDIR/rootfs/usr/bin/hostname'
+  # Process inspection
+  rm -f '$TMPDIR/rootfs/usr/bin/ps'      '$TMPDIR/rootfs/usr/bin/top' \
+        '$TMPDIR/rootfs/usr/bin/htop'
+  # Package managers
+  rm -f '$TMPDIR/rootfs/usr/bin/apt'       '$TMPDIR/rootfs/usr/bin/apt-get' \
+        '$TMPDIR/rootfs/usr/bin/apt-cache'  '$TMPDIR/rootfs/usr/bin/dpkg'
+  # Account / credential management
+  rm -f '$TMPDIR/rootfs/usr/bin/passwd'    '$TMPDIR/rootfs/usr/bin/chsh' \
+        '$TMPDIR/rootfs/usr/bin/chfn'      '$TMPDIR/rootfs/usr/bin/newgrp' \
+        '$TMPDIR/rootfs/usr/sbin/useradd'  '$TMPDIR/rootfs/usr/sbin/adduser' \
+        '$TMPDIR/rootfs/usr/sbin/usermod'  '$TMPDIR/rootfs/usr/sbin/userdel' \
+        '$TMPDIR/rootfs/usr/sbin/groupadd'
+
+  mksquashfs '$TMPDIR/rootfs' '$TMPDIR/rootfs.squashfs' -noappend -comp xz
+"
+mv "$TMPDIR/rootfs.squashfs" "$ROOTFS_DEST"
+
+echo ""
+echo "==> Done! Rootfs ready at: $ROOTFS_DEST"
+echo "    The agent binary is at /usr/local/bin/agent-runner inside the image."

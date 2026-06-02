@@ -1,0 +1,42 @@
+package httpserver
+
+import (
+	"oblak/internal/function"
+	"oblak/internal/invocation"
+	"oblak/internal/server/config"
+	"oblak/internal/server/events"
+	"oblak/internal/server/invocations"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/minio/minio-go/v7"
+
+	"oblak/internal/server/authkey"
+	"oblak/internal/server/handler"
+	"oblak/internal/server/middleware"
+)
+
+type Server struct {
+	router    *gin.Engine
+	db        *pgxpool.Pool
+	filestore *minio.Client
+}
+
+func New(db *pgxpool.Pool, filestore *minio.Client, kek string, quarantineBus *events.Bus[events.QuarantineEvent],
+	extractionBus *events.Bus[events.ExtractionEvent], functionStore *function.Store, invocationStore *invocation.Store,
+	invocationLogStore *invocations.InvocationLogStore, cfg *config.Config) *Server {
+	s := &Server{
+		router:    gin.Default(),
+		db:        db,
+		filestore: filestore,
+	}
+	h := handler.New(functionStore, invocationStore, invocationLogStore, filestore, quarantineBus, extractionBus)
+	auth := middleware.RequireAuth(authkey.NewStore(db, kek))
+	rateLimit := middleware.RateLimitByIP(cfg.MaxTokenSize, cfg.TimeInterval)
+	s.registerRoutes(h, rateLimit, auth)
+	return s
+}
+
+func (s *Server) Run(addr string) error {
+	return s.router.Run(addr)
+}

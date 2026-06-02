@@ -1,0 +1,106 @@
+package vm
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"oblak/internal/agentproto"
+	"oblak/internal/server/filestore"
+
+	"github.com/minio/minio-go/v7"
+)
+
+// EnvironmentPrepareRunner boots a short-lived VM to install dependencies and persist the resulting drive back to MinIO.
+type EnvironmentPrepareRunner struct {
+	filestore   *minio.Client
+	logStreamer *InvocationLogStreamer
+}
+
+// NewEnvironmentPrepareRunner returns a runner backed by the given MinIO client.
+func NewEnvironmentPrepareRunner(client *minio.Client) *EnvironmentPrepareRunner {
+	bucketRegistry := filestore.NewBucketRegistry()
+	bucketName := bucketRegistry.Name(filestore.LogsBucket)
+	return &EnvironmentPrepareRunner{
+		filestore:   client,
+		logStreamer: NewInvocationLogStreamer(client, bucketName),
+	}
+}
+
+// PrepareEnvironment boots a VM with the given code and dependency drives, runs the build
+// agent, streams output to logsObjectName, and on success uploads the prepared deps drive.
+func (ep *EnvironmentPrepareRunner) PrepareEnvironment(ctx context.Context, codeObjectName, depsObjectName, logsObjectName string) (err error) {
+	var pendingCleanups []func() error
+	defer func() {
+		if err != nil {
+			for _, c := range pendingCleanups {
+				_ = c()
+			}
+		}
+	}()
+
+	codeBucket := filestore.NewBucketRegistry().Name(filestore.FunctionsBucket)
+	archiveDrive, err := ArchiveDrive(ctx, ep.filestore, codeBucket, codeObjectName)
+	if err != nil {
+		return fmt.Errorf("failed to prepare code drive: %w", err)
+	}
+	pendingCleanups = append(pendingCleanups, archiveDrive.Cleanup)
+
+	drivesBucket := filestore.NewBucketRegistry().Name(filestore.DrivesBucket)
+	depsDrive, err := MinioUploadDrive(ep.filestore, drivesBucket, depsObjectName)
+	if err != nil {
+		return fmt.Errorf("failed to prepare deps drive: %w", err)
+	}
+	pendingCleanups = append(pendingCleanups, depsDrive.Cleanup)
+
+	drives := []DriveMount{RootDrive(), archiveDrive, depsDrive}
+
+	resources := PreparePolicy.Defaults()
+	PreparePolicy.ApplyHardLimits(&resources) // keep this if using externally provided resources instead of defaults
+
+	execCtx, cancel := context.WithTimeout(ctx, resources.ExecutionTimeLimit)
+	defer cancel()
+
+	m, err := StartMachine(execCtx, drives, resources)
+	if err != nil {
+		return fmt.Errorf("failed to start build machine: %w", err)
+	}
+	pendingCleanups = nil
+	defer m.CleanUpDrives()
+
+	log.Printf("Log available at: %s\n", m.LogPath)
+
+	conn, err := m.Connect()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err = conn.Send(agentproto.Build()); err != nil {
+		return err
+	}
+
+	finalMsg, err := ep.logStreamer.Stream(execCtx, logsObjectName, conn)
+	if err != nil {
+		return fmt.Errorf("failed during build stream logging: %w", err)
+	}
+
+	// Compute build success using the final execution message
+	isSuccessful := finalMsg.Type == agentproto.TypeDone && finalMsg.ExitCode != nil && *finalMsg.ExitCode == 0
+	// ---------------------------------------------
+
+	if err = m.Stop(); err != nil {
+		log.Printf("failed to stop vm %s: %v", m.Id, err)
+	}
+
+	if isSuccessful {
+		err = depsDrive.Save()
+
+		if err != nil {
+			return fmt.Errorf("failed to upload prepared env to minio: %v", err)
+		}
+	} else {
+		return &UserError{reason: "failed to install dependencies (non-zero exit code)"}
+	}
+
+	return nil
+}
