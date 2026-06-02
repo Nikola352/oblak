@@ -37,6 +37,18 @@ fakeroot -- bash -c "
   unzip -q '$TMPDIR/pip.whl' -d '$TMPDIR/rootfs/usr/lib/python3/dist-packages/'
   cp '$AGENT_BIN' '$TMPDIR/rootfs/usr/local/bin/agent-runner'
   chmod 0755 '$TMPDIR/rootfs/usr/local/bin/agent-runner'
+
+  echo '==> Creating unprivileged runner user (UID/GID 5000)...'
+  echo 'runner:x:5000:5000::/nonexistent:/usr/sbin/nologin' >> '$TMPDIR/rootfs/etc/passwd'
+  echo 'runner:x:5000:'                                    >> '$TMPDIR/rootfs/etc/group'
+  echo 'runner:!:::::::'                                  >> '$TMPDIR/rootfs/etc/shadow'
+  [ -f '$TMPDIR/rootfs/etc/gshadow' ] && echo 'runner:!::' >> '$TMPDIR/rootfs/etc/gshadow' || true
+
+  echo '==> Setting mount-point permissions...'
+  chmod 755  '$TMPDIR/rootfs/app'
+  chmod 755  '$TMPDIR/rootfs/deps'
+  chmod 1777 '$TMPDIR/rootfs/tmp'
+
   mksquashfs '$TMPDIR/rootfs' '$TMPDIR/rootfs.squashfs' -noappend -comp xz
 "
 mv "$TMPDIR/rootfs.squashfs" "$ROOTFS_DEST"

@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"oblak/internal/agentproto"
 	"os"
 	"os/exec"
@@ -32,7 +33,13 @@ func (j *ExecJob) Run(conn *agentproto.Conn, payload string) error {
 	code := "import base64,json,handler; handler.handle(json.loads(base64.b64decode('" + encoded + "')))"
 
 	cmd := exec.Command("python3", "-c", code)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		Credential: &syscall.Credential{
+			Uid: 5000,
+			Gid: 5000,
+		},
+	}
 	cmd.Env = append(os.Environ(), "PYTHONPATH=/deps")
 	cmd.Dir = "/app"
 
@@ -81,6 +88,9 @@ func (j *ExecJob) mountDrives() error {
 		syscall.MS_NOSUID|syscall.MS_NOEXEC|syscall.MS_NODEV,
 	); err != nil {
 		return err
+	}
+	if err := os.Chown("/tmp", 5000, 5000); err != nil {
+		return fmt.Errorf("chown /tmp: %w", err)
 	}
 	return nil
 }
