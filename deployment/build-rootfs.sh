@@ -49,6 +49,33 @@ fakeroot -- bash -c "
   chmod 755  '$TMPDIR/rootfs/deps'
   chmod 1777 '$TMPDIR/rootfs/tmp'
 
+  echo '==> Removing attack-surface binaries...'
+  # Shells
+  rm -f '$TMPDIR/rootfs/usr/bin/bash'    '$TMPDIR/rootfs/usr/bin/dash' \
+        '$TMPDIR/rootfs/usr/bin/sh'      '$TMPDIR/rootfs/usr/bin/rbash'
+  # Privilege escalation
+  rm -f '$TMPDIR/rootfs/usr/bin/su'      '$TMPDIR/rootfs/usr/bin/sudo' \
+        '$TMPDIR/rootfs/usr/sbin/sudo'
+  # Network download / exfiltration
+  rm -f '$TMPDIR/rootfs/usr/bin/wget'    '$TMPDIR/rootfs/usr/bin/curl' \
+        '$TMPDIR/rootfs/usr/bin/nc'      '$TMPDIR/rootfs/usr/bin/ncat' \
+        '$TMPDIR/rootfs/usr/bin/netcat'  '$TMPDIR/rootfs/usr/bin/socat'
+  # Fingerprinting / recon
+  rm -f '$TMPDIR/rootfs/usr/bin/whoami'  '$TMPDIR/rootfs/usr/bin/id' \
+        '$TMPDIR/rootfs/usr/bin/hostname'
+  # Process inspection
+  rm -f '$TMPDIR/rootfs/usr/bin/ps'      '$TMPDIR/rootfs/usr/bin/top' \
+        '$TMPDIR/rootfs/usr/bin/htop'
+  # Package managers
+  rm -f '$TMPDIR/rootfs/usr/bin/apt'       '$TMPDIR/rootfs/usr/bin/apt-get' \
+        '$TMPDIR/rootfs/usr/bin/apt-cache'  '$TMPDIR/rootfs/usr/bin/dpkg'
+  # Account / credential management
+  rm -f '$TMPDIR/rootfs/usr/bin/passwd'    '$TMPDIR/rootfs/usr/bin/chsh' \
+        '$TMPDIR/rootfs/usr/bin/chfn'      '$TMPDIR/rootfs/usr/bin/newgrp' \
+        '$TMPDIR/rootfs/usr/sbin/useradd'  '$TMPDIR/rootfs/usr/sbin/adduser' \
+        '$TMPDIR/rootfs/usr/sbin/usermod'  '$TMPDIR/rootfs/usr/sbin/userdel' \
+        '$TMPDIR/rootfs/usr/sbin/groupadd'
+
   mksquashfs '$TMPDIR/rootfs' '$TMPDIR/rootfs.squashfs' -noappend -comp xz
 "
 mv "$TMPDIR/rootfs.squashfs" "$ROOTFS_DEST"
