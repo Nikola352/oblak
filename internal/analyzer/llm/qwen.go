@@ -123,6 +123,10 @@ You must respond with ONLY valid, minified JSON. Do not include markdown formatt
 		return nil, fmt.Errorf("failed to unmarshal Qwen's structured verdict string: %w. Raw string was: %s", err, ollamaResp.Response)
 	}
 
+	if verdict.Verdict == "SUSPICIOUS" {
+		verdict.Verdict = "MALICIOUS"
+	}
+
 	return &verdict, nil
 }
 
