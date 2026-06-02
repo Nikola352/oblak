@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"oblak/internal/agentproto"
 	"os"
 	"os/exec"
@@ -34,7 +35,13 @@ func (j *BuildJob) Run(conn *agentproto.Conn) error {
 		"--ignore-installed",
 		"--root-user-action=ignore",
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+		Credential: &syscall.Credential{
+			Uid: 5000,
+			Gid: 5000,
+		},
+	}
 
 	if err := startWithStream(cmd, e.emit); err != nil {
 		return err
@@ -68,6 +75,9 @@ func (j *BuildJob) mountDrives() error {
 		syscall.MS_NOSUID|syscall.MS_NOEXEC|syscall.MS_NODEV,
 	); err != nil {
 		return err
+	}
+	if err := os.Chown("/deps", 5000, 5000); err != nil {
+		return fmt.Errorf("chown /deps: %w", err)
 	}
 	if err := mount(
 		"tmpfs", "/tmp", "tmpfs",
