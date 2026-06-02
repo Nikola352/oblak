@@ -3,6 +3,7 @@ package vm
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -154,6 +155,11 @@ func ArchiveDrive(ctx context.Context, filestore *minio.Client, bucket, objectNa
 		return DriveMount{}, err
 	}
 
+	// Unprivileged runner user inside VM must be able to read the user code
+	if err = widenPermissions(extractDir); err != nil {
+		return DriveMount{}, fmt.Errorf("chmod extracted archive: %w", err)
+	}
+
 	squashfs, err := os.CreateTemp(driveDir, "drive-*.sqfs")
 	if err != nil {
 		return DriveMount{}, err
@@ -217,4 +223,21 @@ func createBlankExt4(sizeMB int64) (string, error) {
 	}
 
 	return path, nil
+}
+
+// widenPermissions walks dir and sets dirs to 0755 and files to their existing mode | 0644.
+func widenPermissions(dir string) error {
+	return filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return os.Chmod(path, 0755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return os.Chmod(path, info.Mode()|0644)
+	})
 }
